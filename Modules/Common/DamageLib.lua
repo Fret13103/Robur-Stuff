@@ -72,7 +72,6 @@ end
 ---@param unit AIBaseClient
 ---@param buffName string
 ---@return integer
----GotBuff
 function GetBuffCount(unit, buffName)
     local buff = GetBuffData(unit, buffName)
     return buff and buff.Count or 0
@@ -81,7 +80,6 @@ end
 ---@param spellSlot integer
 ---@param spellName string
 ---@return boolean
----GotSpell
 function HaveSpell(spellSlot, spellName)
     return Player:GetSpell(spellSlot).Name == spellName
 end

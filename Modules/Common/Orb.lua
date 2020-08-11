@@ -14,6 +14,7 @@ local BuffTypes = _Core.Enums.BuffTypes
 local Player = ObjectManager.Player
 
 local Orbwalker = {
+    Loaded = false,
     Setting = {
         Key = {
             Combo = 32, -- Spacebar
@@ -403,18 +404,21 @@ local function OnDraw()
 end
 
 function Orbwalker.Load()
-    EventManager.RegisterCallback(Events.OnDraw, OnDraw)
-    EventManager.RegisterCallback(Events.OnTick, OnTick)
-    local Key = Orbwalker.Setting.Key
-    EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)
-    EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = false end end)
-    EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LastHit then Orbwalker.Mode.LastHit = true  end end)
-    EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LastHit then Orbwalker.Mode.LastHit = false end end)
-    EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = true  end end)
-    EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = false end end)
-    EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = true  end end)
-    EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = false end end)
-    _G.OrbActive = true
+    if not Orbwalker.Loaded then
+        Orbwalker.Loaded = true
+        EventManager.RegisterCallback(Events.OnDraw, OnDraw)
+        EventManager.RegisterCallback(Events.OnTick, OnTick)
+        local Key = Orbwalker.Setting.Key
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = false end end)
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LastHit then Orbwalker.Mode.LastHit = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LastHit then Orbwalker.Mode.LastHit = false end end)
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = false end end)
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = false end end)
+        _G.OrbActive = true
+    end
 end
 
 return Orbwalker

@@ -1,8 +1,6 @@
 
 Modules/Common/Autosmite.lua
 Modules/Common/Orbwalker.lua
-Modules/Common/Orb.lua
-Modules/DemoLoadOrbwalker.lua
 Modules/Common/lxMisc.lua
 Modules/Common/lxWalk.lua
 Modules/Common/MovementPrediction.lua

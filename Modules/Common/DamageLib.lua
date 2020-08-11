@@ -211,7 +211,7 @@ end
 ---@param target AIBaseClient
 ---@param amount number
 ---@return number
-function CalcPhysicalDamage(source, target, amount)
+function DmgLib:CalcPhysicalDamage(source, target, amount)
     local PercentArmorPen = source.PercentArmorPen
     local FlatArmorPen = source.FlatArmorPen
     local PercentBonusArmorPen = source.PercentBonusArmorPen
@@ -252,7 +252,7 @@ end
 ---@param target AIBaseClient
 ---@param amount number
 ---@return number
-function CalcMagicalDamage(source, target, amount)
+function DmgLib:CalcMagicalDamage(source, target, amount)
     local magicResist = target.SpellBlock
     local val = 0
     if magicResist < 0 then
@@ -273,7 +273,7 @@ end
 ---@param physical number
 ---@param trueDmg number
 ---@return number
-function CalcMixedDamage(source, target, amountPhysical, amountMagical, magic, physical, trueDmg)
+function DmgLib:CalcMixedDamage(source, target, amountPhysical, amountMagical, magic, physical, trueDmg)
     magic = magic or 50
     physical = physical or 50
     trueDmg = trueDmg or 0

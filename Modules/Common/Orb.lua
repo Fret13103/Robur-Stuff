@@ -89,6 +89,12 @@ function Orbwalker:GetAttackRange(source, target)
     return  source.AttackRange + source.BoundingRadius + (target and target.BoundingRadius or 0)
 end
 
+function Orbwalker:InAttackRange(target)
+    if target and target.IsValid then
+        return Player.Position:Distance(target.Position) < Orbwalker:GetAttackRange(Player,target)
+    end
+end
+
 function Orbwalker:HasBuffType(unit,buffType)
     local ai = unit.AsAI
     if ai and ai.IsValid then
@@ -114,7 +120,7 @@ end
 function Orbwalker:IsValidAutoAttackTarget(obj)
     unit = obj.AsAttackableUnit
     if IgnoreList_Strange[string.lower(unit.Name)] then return false end
-    if unit and unit.IsVisible and not unit.IsDead and unit.Health > 0 then
+    if unit and  not unit.IsDead and unit.Health > 0 then
         if starts_with(tostring(obj.IsAlive),"function: ") then return false end
         local range = Orbwalker:GetAttackRange(Player, unit)
         if Player.Position:Distance(unit.Position) < range then

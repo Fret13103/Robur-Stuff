@@ -7,3 +7,8 @@ Modules/Common/lxMisc.lua
 Modules/Common/lxWalk.lua
 Modules/Common/MovementPrediction.lua
 Modules/Common/MTrist.lua
+.idea/vcs.xml
+.idea/modules.xml
+*.iml
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/misc.xml

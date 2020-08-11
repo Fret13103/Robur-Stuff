@@ -321,6 +321,7 @@ end
 
 function Orbwalker:Attack()
     if Orbwalker:CanAttack() then
+        if _G.OrbTarget ~= nil then Orbwalker.Override.ForceTarget = _G.OrbTarget end
         local target = Orbwalker.Override.ForceTarget
         if target == nil then
             if (Orbwalker.Mode.Combo) then
@@ -339,6 +340,7 @@ function Orbwalker:Attack()
             -- todo OnPostAttack
         end
         Orbwalker.Override.ForceTarget = nil
+        _G.OrbTarget = nil
     end
 end
 
@@ -412,6 +414,7 @@ function Orbwalker.Load()
     EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = false end end)
     EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = true  end end)
     EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = false end end)
+    _G.OrbActive = true
 end
 
 return Orbwalker

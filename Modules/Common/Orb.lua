@@ -1,6 +1,8 @@
 require("common.log")
 module("Lib_Orb", package.seeall, log.setup)
 
+local DMGLib = require("lol/Modules/Common/DamageLib")
+
 local ts = require("lol/Modules/Common/simpleTS")
 
 local _Core = _G.CoreEx
@@ -130,6 +132,20 @@ function Orbwalker:IsValidAutoAttackTarget(obj)
         end
     end
     return false
+end
+
+local function TempGetLastHitMinion()
+    local minions = ObjectManager.Get("enemy", "minions")
+    local tempMinion = nil
+    for _, obj in pairs(minions) do
+        local minion = obj.AsMinion
+        if minion and Orbwalker:IsValidAutoAttackTarget(minion) and DMGLib:GetDamage("AA", minion) > minion.Health then
+            if tempMinion == nil or minion.Health < tempMinion.Health then
+                tempMinion = minion
+            end
+        end
+    end
+    if tempMinion ~= nil then return tempMinion end
 end
 
 local function TempGetLaneClearTarget()
@@ -331,10 +347,12 @@ function Orbwalker:Attack()
         if _G.OrbTarget ~= nil then Orbwalker.Override.ForceTarget = _G.OrbTarget end
         local target = Orbwalker.Override.ForceTarget
         if target == nil then
-            if (Orbwalker.Mode.Combo) then
+            if Orbwalker.Mode.Combo then
                 target = ts:GetTarget(Player.AttackRange, ts.Priority.LowestHealth)
-            elseif(Orbwalker.Mode.LaneClear) then
+            elseif Orbwalker.Mode.LaneClear then
                 target = TempGetLaneClearTarget()
+            elseif Orbwalker.Mode.LastHit then
+                target = TempGetLastHitMinion()
             end
         end
         if target ~= nil then
@@ -371,7 +389,7 @@ local function OnTick()
     -- if Game.IsChatOpen() then INFO("Chat Open") end bugged if user not open and close it once manualy
     if Player.IsDead then return end
 
-    if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear then
+    if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LastHit then
         Orbwalker.Orbwalk()
     end
 end

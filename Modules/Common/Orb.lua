@@ -17,6 +17,7 @@ local Player = ObjectManager.Player
 
 local Orbwalker = {
     Loaded = false,
+    CurrentTarget = nil,
     Setting = {
         Key = {
             Combo = 32, -- Spacebar
@@ -121,7 +122,7 @@ end
 
 function Orbwalker:IsValidAutoAttackTarget(obj)
     unit = obj.AsAttackableUnit
-    if not obj.IsAlive then return false end
+    if not obj.IsAlive or not obj.IsTargetable then return false end
     if IgnoreList[obj.CharName] then return false end
     if unit and  not unit.IsDead and unit.Health > 0 then
         if starts_with(tostring(obj.IsAlive),"function: ") then return false end
@@ -353,6 +354,7 @@ function Orbwalker:Attack()
         if target == nil then
             if Orbwalker.Mode.Combo then
                 target = ts:GetTarget(Player.AttackRange, ts.Priority.LowestHealth)
+                Orbwalker.CurrentTarget = target
             elseif Orbwalker.Mode.LaneClear then
                 target = TempGetLaneClearTarget()
             elseif Orbwalker.Mode.LastHit then

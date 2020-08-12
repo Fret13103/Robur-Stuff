@@ -575,7 +575,6 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
         local name = source.CharName
         if AttackPassive[name] then
             for i, f in ipairs(AttackPassive[name]) do
-                INFO(tostring(i) .. " " .. tostring(f))
                 result = result + f.getDamage(source, target) or 0
             end
         end

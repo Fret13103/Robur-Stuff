@@ -75,7 +75,7 @@ local function Set (list)
   return set
 end
 
-local IgnoreList_Strange = Set{"plantHealthmirrored","camprespawn","plantsatchel","plantvision", "planthealth","cupcake trap", "seed", "plagueblock","unused","","",""}
+local IgnoreList = Set{"NidaleeSpear", "SRU_CampRespawnMarker", "SRU_Plant_Health", "SRU_Plant_Vision","SRU_Plant_Satchel"}
 
 function Orbwalker:GetTick()
     return math.floor(Game.GetTime() * 1000)
@@ -121,7 +121,8 @@ end
 
 function Orbwalker:IsValidAutoAttackTarget(obj)
     unit = obj.AsAttackableUnit
-    if IgnoreList_Strange[string.lower(unit.Name)] then return false end
+    if not obj.IsAlive then return false end
+    if IgnoreList[obj.CharName] then return false end
     if unit and  not unit.IsDead and unit.Health > 0 then
         if starts_with(tostring(obj.IsAlive),"function: ") then return false end
         local range = Orbwalker:GetAttackRange(Player, unit)

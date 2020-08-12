@@ -1,7 +1,5 @@
 ---@alias Pointer integer
 ---@alias Handle_t integer
----@alias integer number
----@alias bool boolean
 
 ---@type fun():nil
 inject_process_pe_infect_C = "inject_process_pe_infect_C"
@@ -407,9 +405,9 @@ local SpellData
 ---@field TotalDelay number
 ---@field StartPos Vector
 ---@field EndPos Vector
----@field Caster Pointer
----@field Source Pointer
----@field Target Pointer
+---@field Caster AIBaseClient
+---@field Source AIBaseClient
+---@field Target AttackableUnit
 ---@field StartTime number
 ---@field EndTime number
 ---@field CastEndTime number
@@ -487,10 +485,12 @@ local BuffInst
 ---@field AsAttackableUnit AttackableUnit
 ---@field IsVisible boolean
 ---@field BoundingRadius number
----@field Distance fun(self: number, p2: Vector|GameObject):number
+---@field Distance fun(self: number, p2: Vector):number
+---@field EdgeDistance fun(self: number, p2: Vector):number
 ---@field BBoxMin Vector
 ---@field BBoxMax Vector
 ---@field Position Vector
+---@field Orientation Vector
 ---@field Orientation Vector
 local GameObject
 
@@ -608,6 +608,8 @@ local AttackableUnit
 ---@field ActiveSpell SpellCast
 ---@field HealthBarScreenPos Vector
 ---@field BuffCount integer
+---@field Direction Vector
+---@field FastPrediction fun(self: number, delay_ms: number):Vector
 ---@field GetSpell fun(self: number, slot: integer):SpellData|nil
 ---@field GetSpellState fun(self: number, slot: integer):number
 ---@field GetBuff fun(self: number, index: integer):BuffInst|nil
@@ -661,6 +663,22 @@ local AITurretClient
     ██      ██ ██ ███████ ███████ ██ ███████ ███████    
 ]]
 ---@class MissileClient  : GameObject
+---@field StartPos Vector
+---@field EndPos Vector
+---@field StartTime number
+---@field CastEndTime number
+---@field EndTime number
+---@field IsBasicAttack boolean
+---@field IsSpecialAttack boolean
+---@field Caster AIBaseClient
+---@field Source AIBaseClient
+---@field Target AttackableUnit
+---@field Width number
+---@field Speed number
+---@field Accel number
+---@field MaxSpeed number
+---@field MinSpeed number
+---@field FixedTravelTime number
 local MissileClient
 
 ---_G.CoreEx.ObjectManager

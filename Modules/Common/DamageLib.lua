@@ -40,8 +40,8 @@ function table.contains(table, value)
 end
 
 ---@param unit AIBaseClient
----@param itemId integer
----@return integer
+---@param itemId number
+---@return number
 function GetItemSlot(unit, itemId)
     for i = SpellSlots.Item1, SpellSlots.Trinket do
         -- todo GetItemSlot
@@ -71,13 +71,13 @@ end
 
 ---@param unit AIBaseClient
 ---@param buffName string
----@return integer
+---@return number
 function GetBuffCount(unit, buffName)
     local buff = GetBuffData(unit, buffName)
     return buff and buff.Count or 0
 end
 
----@param spellSlot integer
+---@param spellSlot number
 ---@param spellName string
 ---@return boolean
 function HaveSpell(spellSlot, spellName)
@@ -85,7 +85,7 @@ function HaveSpell(spellSlot, spellName)
 end
 
 ---@param unit AIBaseClient
----@param delay integer
+---@param delay number
 ---@return boolean
 ---HasPoison wierd 0.141 delay
 function IsPoisoned(unit, delay)
@@ -129,23 +129,29 @@ local DamageReductionTable = {
     ["Malzahar"] =  {buff = "malzaharpassiveshield",    amount = function(target) return 0.9 end}
 }
 local AttackPassive = {
+    ["Aatrox"] = {getDamage = function(source, target)
+        if HaveBuff(source, "AatroxWPower") and HaveBuff(source, "AatroxWONHPowerBuff") then
+            return DmgLib:GetDamage("W", target)
+        end
+    end},
     ["Alistar"] = {getDamage = function(source, target)
         if HaveBuff(source,"alistartrample") then
             local raw = 40 + source.Level* 10 + 0.1 * source.TotalAP
-            return CalcMagicalDamage(source, target, raw)
+            return DmgLib:CalcMagicalDamage(source, target, raw)
         end
     end},
-    ["Ashe"] = {getDamage = function(source, target)
-        if HaveBuff(target,"ashepassiveslow") then
-            local raw = source.TotalAD * (0.1 + (source.CritChance * (1 + source.CritDamageMultiplier)))
-            return CalcPhysicalDamage(source, target, raw)
-        end
-    end },
-    ["Ashe_2"] = {getDamage = function(source, target)
-        if HaveBuff(source, "asheqattack") then
-            return GetDamage("Q",target, source)
-        end
-    end},
+    ["Ashe"] = {
+        getDamage = function(source, target)
+            if HaveBuff(target,"ashepassiveslow") then
+                local raw = source.TotalAD * (0.1 + (source.CritChance * (1 + source.CritDamageMultiplier)))
+                return DmgLib:CalcPhysicalDamage(source, target, raw)
+            end
+        end ,
+        getDamage = function(source, target)
+            if HaveBuff(source, "asheqattack") then
+                return DmgLib:GetDamage("Q",target)
+            end
+        end},
     ["Bard"] = {getDamage = function(source, target)
         if (GetBuffCount(source, "bardpspiritammocount") > 0) then
             local buffCount = GetBuffCount(source, "bardpdisplaychimecount")
@@ -154,7 +160,7 @@ local AttackPassive = {
             if buffCount > 150 then
                 raw = raw + math.floor((buffCount - 150) / 5 + 0.5) * 20
             end
-            return CalcMagicalDamage(source, target, raw)
+            return DmgLib:CalcMagicalDamage(source, target, raw)
         end
     end },
 }
@@ -275,8 +281,8 @@ function DmgLib:CalcMixedDamage(source, target, amountPhysical, amountMagical, m
     magic = magic or 50
     physical = physical or 50
     trueDmg = trueDmg or 0
-    local m = CalcMagicalDamage(source, target, (amountMagical * magic) / 100)
-    local p = CalcMagicalDamage(source, target, (amountPhysical * physical) / 100)
+    local m = DmgLib:CalcMagicalDamage(source, target, (amountMagical * magic) / 100)
+    local p = DmgLib:CalcMagicalDamage(source, target, (amountPhysical * physical) / 100)
     local pfm = PassiveFlatMod(source, target)
     local t = (amountMagical * trueDmg) / 100
     return m + p + pfm + t
@@ -285,8 +291,8 @@ end
 ---@param spell string
 ---@param target AIBaseClient
 ---@param source AIBaseClient
----@param stage integer
----@param level integer
+---@param stage number
+---@param level number
 ---@param includePassive boolean
 ---@return number
 function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
@@ -300,7 +306,7 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
         if source.CharName == "Kalista" then k = 0.9 end
         -- if kled and SpellSlot.Q Name == "KledRiderQ" k = 0.8
         if not includePassive then
-            return CalcPhysicalDamage(source, target, result*k)
+            return DmgLib:CalcPhysicalDamage(source, target, result*k)
         end
         local reduction = 0
         if source.IsHero then
@@ -310,18 +316,16 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
              --Face of the Mountain
         end
         --ChampionPassiveDamage
-        for i = 1, 2 do
-            local name = source.CharName
-            if i > 1 then name = name.."_"..tostring(i) end
-            if AttackPassive[name] then
-                local add = AttackPassive[name].getDamage(source, target) or 0
-                result = result + add
-            end
+        local name = source.CharName
+        for i, f in ipairs(AttackPassive[name]) do
+            INFO(tostring(i) .. " " .. tostring(f))
+            result = result + f.getDamage(source, target) or 0
         end
+
         if source.IsHero and source.CharName == "Corki" then
-            return CalcMixedDamage(source, target, (result-reduction)*k, result*k)
+            return DmgLib:CalcMixedDamage(source, target, (result-reduction)*k, result*k)
         end
-        return CalcPhysicalDamage(source, target, (result - reduction)*k + PassiveFlatMod(source, target));
+        return DmgLib:CalcPhysicalDamage(source, target, (result - reduction)*k + PassiveFlatMod(source, target));
     end
     return 0
 end

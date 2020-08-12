@@ -257,6 +257,9 @@ local function PrintIfSuspect(unit)
     if starts_with(name, "Sru_") then return end
     if starts_with(name, "MiniKrug") then return end
     INFO("Attacked: ".. string.lower(name))
+    if unit.CharName ~= nil then
+        INFO("CharName: ".. tostring(unit.CharName))
+    end
     if unit.IsDead ~= nil then
         INFO("IsDead: ".. tostring(unit.IsDead))
     end

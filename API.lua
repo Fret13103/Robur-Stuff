@@ -1,5 +1,7 @@
 ---@alias Pointer integer
 ---@alias Handle_t integer
+---@alias integer number
+---@alias bool boolean
 
 ---@type fun():nil
 inject_process_pe_infect_C = "inject_process_pe_infect_C"

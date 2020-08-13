@@ -115,8 +115,14 @@ end
 
 function Orbwalker:GetAttackRange(source, target)
     source = source or Player
-    -- -5 Prevent Stutter
-    return  source.AttackRange + source.BoundingRadius + (target and target.BoundingRadius - 5 or 0)
+    local dist = source.AttackRange + source.BoundingRadius
+    if target then
+        dist = dist + target.BoundingRadius
+        if target.IsHero then
+            dist = dist - 25
+        end
+    end
+    return dist
 end
 
 function Orbwalker:InAttackRange(target)
@@ -238,8 +244,8 @@ local function TempGetLaneClearTarget()
     end
     if tempWard ~= nil then return tempWard end
 
-    local minions = ObjectManager.Get("neutral", "minions")
-    local tempMinion = nil
+    minions = ObjectManager.Get("neutral", "minions")
+    tempMinion = nil
     for _, obj in pairs(minions) do
         local minion = obj.AsMinion
         if minion and Orbwalker:IsValidAutoAttackTarget(minion) then

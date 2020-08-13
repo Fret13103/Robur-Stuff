@@ -86,6 +86,14 @@ function Orbwalker:GetTick()
     return math.floor(Game.GetTime() * 1000)
 end
 
+function Orbwalker:ResetAutoAttack()
+        Orbwalker.LastAttack.Tick = 0
+end
+
+function Orbwalker:ResetLastMove()
+        Orbwalker.LastMove.Tick = 0
+end
+
 function Orbwalker:GetModDelay()
     local ping = Game.GetLatency()
     local addValue = 0
@@ -246,7 +254,7 @@ end
 
 function Orbwalker:CanWalk()
     local tick = Orbwalker:GetTick()
-    if Orbwalker.LastAttack.Tick <= tick then
+    if Orbwalker.LastMove.Tick + Orbwalker.Setting.MovementDelay <= tick then
         return tick + Game.GetLatency() / 2 >= Orbwalker.LastAttack.Tick + Player.AttackCastDelay*1000 + Orbwalker:GetModDelay()
     end
     return false
@@ -374,13 +382,13 @@ function Orbwalker:Attack()
             end
         end
         if target ~= nil then
-            -- todo OnPreAttack
+            EventManager.FireEvent(Events.OnPreAttack, target)
             Input.Attack(target)
             PrintIfSuspect(target)
-            Orbwalker.LastMove.Pos = nil
+            Orbwalker:ResetLastMove()
             Orbwalker.LastAttack.Tick = Orbwalker:GetTick()
             Orbwalker.LastAttack.Target = target
-            -- todo OnPostAttack
+            delay(250, function () EventManager.FireEvent(Events.OnPostAttack, target) end)
         end
         Orbwalker.Override.ForceTarget = nil
         _G.OrbTarget = nil
@@ -391,9 +399,11 @@ function Orbwalker:Walk()
     if Orbwalker:CanWalk() then
         local pos = Orbwalker.GetMovePos()
         -- todo OnPreMove
+        EventManager.FireEvent(Events.OnPreMove, pos)
         Input.MoveTo(pos)
         Orbwalker.LastMove.Tick = Orbwalker:GetTick()
         Orbwalker.LastMove.Pos = pos
+        delay(25, function () EventManager.FireEvent(Events.OnPostMove, pos) end)
         -- todo OnPostMove
     end
 end
@@ -403,8 +413,24 @@ function Orbwalker:Orbwalk()
     Orbwalker:Walk()
 end
 
+local function OnPreMove(pos)
+    --INFO("OnPreMove: x:"..pos.x.." y:"..pos.y.."z:"..pos.z)
+end
+
+local function OnPostMove(pos)
+     --INFO("OnPostMove: x:"..pos.x.." y:"..pos.y.."z:"..pos.z)
+end
+
+local function OnPreAttack(target)
+     --INFO("OnPreAttack:"..target.CharName)
+end
+
+local function OnPostAttack(target)
+     --INFO("OnPostAttack:"..target.CharName)
+end
+
 local function OnBasicAttack(obj, spellcast)
-    if obj and obj.asAI then
+    if obj then
         --INFO(obj.CharName)
     end
 end
@@ -457,6 +483,12 @@ function Orbwalker.Load()
         EventManager.RegisterCallback(Events.OnDraw, OnDraw)
         EventManager.RegisterCallback(Events.OnTick, OnTick)
         EventManager.RegisterCallback(Events.OnBasicAttack, OnBasicAttack)
+
+        EventManager.RegisterCallback(Events.OnPreMove, OnPreMove)
+        EventManager.RegisterCallback(Events.OnPostMove, OnPostMove)
+        EventManager.RegisterCallback(Events.OnPreAttack, OnPreAttack)
+        EventManager.RegisterCallback(Events.OnPostAttack, OnPostAttack)
+
         local Key = Orbwalker.Setting.Key
         EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)
         EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = false end end)

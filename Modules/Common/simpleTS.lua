@@ -40,7 +40,7 @@ function ts:GetTarget(range, mode, filterBuffs)
     local tempHero = nil
     for _, obj in pairs(enemies) do
         local hero = obj.AsHero
-        if hero and hero.IsVisible and hero.IsAttackableUnit and hero.Health > 0 and Player.Position:Distance(hero.Position) < range + Player.BoundingRadius + hero.BoundingRadius then
+        if hero and hero.IsVisible and hero.IsAttackableUnit and hero.IsTargetable and hero.Health > 0 and Player.Position:Distance(hero.Position) < range + Player.BoundingRadius + hero.BoundingRadius then
             local NEXT = false
             if filterBuffs then
                 if HasBuffType(hero,BuffTypes.Invulnerability) or hero.IsDodgingMissiles then

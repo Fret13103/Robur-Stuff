@@ -29,7 +29,7 @@ local Orbwalker = {
             LaneClear = 86, -- V
         },
         WindUp = 40,
-        MinDelay = 40,
+        MinDelay = 50,
         MovementDelay = 100,
         Drawing = {
             Quality = 30,
@@ -103,11 +103,11 @@ function Orbwalker:GetModDelay()
     local ping = Game.GetLatency()
     local addValue = 0
     if ping >= 100 then
-        addValue = ping / 100 * 5
-    elseif ping >  Orbwalker.Setting.MinDelay and ping < 100 then
         addValue = ping / 100 * 10
+    elseif ping >  Orbwalker.Setting.MinDelay and ping < 100 then
+        addValue = ping / 100 * 15
     else
-        addValue = Orbwalker.Setting.MinDelay
+        addValue = ping / 100 * 25 + MinDelay
     end
     addValue = addValue + Orbwalker.Setting.WindUp
     return addValue

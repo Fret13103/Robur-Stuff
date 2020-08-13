@@ -1,6 +1,9 @@
 require("common.log")
 module("Lib_Orb", package.seeall, log.setup)
 
+_G.OrbTarget = nil
+_G.OrbActive = true
+
 local DMGLib = require("lol/Modules/Common/DamageLib")
 
 local ts = require("lol/Modules/Common/simpleTS")
@@ -26,7 +29,7 @@ local Orbwalker = {
             LaneClear = 86, -- V
         },
         WindUp = 40,
-        MinPing = 30,
+        MinDelay = 20,
         MovementDelay = 100,
         Drawing = {
             Quality = 30,
@@ -76,20 +79,31 @@ local function Set (list)
   return set
 end
 
-local IgnoreList = Set{"NidaleeSpear", "SRU_CampRespawnMarker", "SRU_Plant_Health", "SRU_Plant_Vision","SRU_Plant_Satchel"}
+local IgnoreList = Set{"NidaleeSpear", "SRU_CampRespawnMarker", "SRU_Plant_Health", "SRU_Plant_Vision","SRU_Plant_Satchel",
+                       "ShenSpirit"}
 
 function Orbwalker:GetTick()
     return math.floor(Game.GetTime() * 1000)
 end
 
 function Orbwalker:GetModDelay()
-    local ping = math.max(Game.GetLatency()/2, Orbwalker.Setting.MinPing)
-    return math.floor(ping + Orbwalker.Setting.WindUp)
+    local ping = Game.GetLatency()
+    local addValue = 0
+    if ping >= 100 then
+        addValue = ping / 100 * 5
+    elseif ping > 40 and ping < 100 then
+        addValue = ping / 100 * 10
+    else
+        addValue = Orbwalker.Setting.MinDelay
+    end
+    addValue = addValue + Orbwalker.Setting.WindUp
+    return addValue
 end
 
 function Orbwalker:GetAttackRange(source, target)
-    if source == nil then source = Player end
-    return  source.AttackRange + source.BoundingRadius + (target and target.BoundingRadius or 0)
+    source = source or Player
+    -- -5 Prevent Stutter
+    return  source.AttackRange + source.BoundingRadius + (target and target.BoundingRadius - 5 or 0)
 end
 
 function Orbwalker:InAttackRange(target)
@@ -121,7 +135,7 @@ end
 
 
 function Orbwalker:IsValidAutoAttackTarget(obj)
-    unit = obj.AsAttackableUnit
+    local unit = obj.AsAttackableUnit
     if not obj.IsAlive or not obj.IsTargetable then return false end
     if IgnoreList[obj.CharName] then return false end
     if unit and  not unit.IsDead and unit.Health > 0 then
@@ -232,10 +246,8 @@ end
 
 function Orbwalker:CanWalk()
     local tick = Orbwalker:GetTick()
-    if Orbwalker.LastMove.Tick + Orbwalker.Setting.MovementDelay <= tick then
-        if Orbwalker.LastAttack.Tick + Player.AttackCastDelay*1000 + Orbwalker:GetModDelay()  <= tick then
-            return true
-        end
+    if Orbwalker.LastAttack.Tick <= tick then
+        return tick + Game.GetLatency() / 2 >= Orbwalker.LastAttack.Tick + Player.AttackCastDelay*1000 + Orbwalker:GetModDelay()
     end
     return false
 end
@@ -391,8 +403,14 @@ function Orbwalker:Orbwalk()
     Orbwalker:Walk()
 end
 
+local function OnBasicAttack(obj, spellcast)
+    if obj and obj.asAI then
+        --INFO(obj.CharName)
+    end
+end
+
 local function OnTick()
-    -- if Game.IsChatOpen() then INFO("Chat Open") end bugged if user not open and close it once manualy
+    if Game.IsChatOpen() then return end
     if Player.IsDead then return end
 
     if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LastHit then
@@ -438,6 +456,7 @@ function Orbwalker.Load()
         Orbwalker.Loaded = true
         EventManager.RegisterCallback(Events.OnDraw, OnDraw)
         EventManager.RegisterCallback(Events.OnTick, OnTick)
+        EventManager.RegisterCallback(Events.OnBasicAttack, OnBasicAttack)
         local Key = Orbwalker.Setting.Key
         EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)
         EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = false end end)

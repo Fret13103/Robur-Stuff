@@ -107,7 +107,7 @@ function Orbwalker:GetModDelay()
     elseif ping >  Orbwalker.Setting.MinDelay and ping < 100 then
         addValue = ping / 100 * 15
     else
-        addValue = ping / 100 * 25 + MinDelay
+        addValue = ping / 100 * 25 + Orbwalker.Setting.MinDelay
     end
     addValue = addValue + Orbwalker.Setting.WindUp
     return addValue
@@ -472,7 +472,7 @@ local function OnDraw()
          local minions = ObjectManager.Get("enemy", "minions")
          for _, obj in pairs(minions) do
              local minion = obj.AsMinion
-             if minion and minion.IsVisible and minion.Health > 0 and Player.Position:Distance(minion.Position) <= Orbwalker:GetAttackRange() + drawing.BoundingRadius.EnemyMinion.Range then
+             if minion and minion.IsVisible and minion.Health > 0 and Player.Position:Distance(minion.Position) <= Orbwalker:GetAttackRange() then
                  Renderer.DrawCircle3D(minion.Position, minion.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.EnemyMinion.Color)
              end
         end

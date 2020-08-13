@@ -387,13 +387,16 @@ function Orbwalker:Attack()
             end
         end
         if target ~= nil then
-            EventManager.FireEvent(Events.OnPreAttack, target)
-            Input.Attack(target)
-            PrintIfSuspect(target)
-            Orbwalker:ResetLastMove()
-            Orbwalker.LastAttack.Tick = Orbwalker:GetTick()
-            Orbwalker.LastAttack.Target = target
-            delay(250, function () EventManager.FireEvent(Events.OnPostAttack, target) end)
+            local args = {Target=target,Process=true}
+            EventManager.FireEvent(Events.OnPreAttack, args)
+            if args.Process then
+                Input.Attack(args.Target)
+                PrintIfSuspect(args.Target)
+                Orbwalker:ResetLastMove()
+                Orbwalker.LastAttack.Tick = Orbwalker:GetTick()
+                Orbwalker.LastAttack.Target = args.Target
+                delay(250, function () EventManager.FireEvent(Events.OnPostAttack, args.Target) end)
+            end
         end
         Orbwalker.Override.ForceTarget = nil
         _G.OrbTarget = nil
@@ -404,12 +407,14 @@ function Orbwalker:Walk()
     if Orbwalker:CanWalk() then
         local pos = Orbwalker.GetMovePos()
         -- todo OnPreMove
-        EventManager.FireEvent(Events.OnPreMove, pos)
-        Input.MoveTo(pos)
-        Orbwalker.LastMove.Tick = Orbwalker:GetTick()
-        Orbwalker.LastMove.Pos = pos
-        delay(25, function () EventManager.FireEvent(Events.OnPostMove, pos) end)
-        -- todo OnPostMove
+        local args = {Position=pos,Process=true}
+        EventManager.FireEvent(Events.OnPreMove, args)
+        if args.Process then
+            Input.MoveTo(args.Position)
+            Orbwalker.LastMove.Tick = Orbwalker:GetTick()
+            Orbwalker.LastMove.Pos = args.Position
+            delay(25, function () EventManager.FireEvent(Events.OnPostMove, args.Position) end)
+        end
     end
 end
 

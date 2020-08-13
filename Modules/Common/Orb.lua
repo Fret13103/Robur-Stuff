@@ -86,8 +86,13 @@ function Orbwalker:GetTick()
     return math.floor(Game.GetTime() * 1000)
 end
 
-function Orbwalker:ResetAutoAttack()
+function Orbwalker:ResetAutoAttack(d)
+    d = d or 0
+    if d == 0 then
         Orbwalker.LastAttack.Tick = 0
+    else
+        delay(d, function () Orbwalker.LastAttack.Tick = 0 end)
+    end
 end
 
 function Orbwalker:ResetLastMove()

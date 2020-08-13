@@ -3,9 +3,6 @@ module("sAshe", package.seeall, log.setup)
 
 local Orb = require("lol/Modules/Common/Orb")
 
-_G.OrbTarget = nil
-_G.OrbActive = true
-
 local _Core = _G.CoreEx
 local ObjectManager = _Core.ObjectManager
 local EventManager = _Core.EventManager

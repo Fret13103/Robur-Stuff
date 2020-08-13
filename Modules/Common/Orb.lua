@@ -29,7 +29,7 @@ local Orbwalker = {
             LaneClear = 86, -- V
         },
         WindUp = 40,
-        MinDelay = 20,
+        MinDelay = 40,
         MovementDelay = 100,
         Drawing = {
             Quality = 30,
@@ -104,7 +104,7 @@ function Orbwalker:GetModDelay()
     local addValue = 0
     if ping >= 100 then
         addValue = ping / 100 * 5
-    elseif ping > 40 and ping < 100 then
+    elseif ping >  Orbwalker.Setting.MinDelay and ping < 100 then
         addValue = ping / 100 * 10
     else
         addValue = Orbwalker.Setting.MinDelay
@@ -445,7 +445,7 @@ local function OnPostAttack(target)
      --INFO("OnPostAttack:"..target.CharName)
 end
 
-local function OnBasicAttack(obj, spellcast)
+local function OnBasicAttack(obj, spellCast)
     if obj then
         --INFO(obj.CharName)
     end

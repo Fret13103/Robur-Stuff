@@ -555,7 +555,6 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
     stage = stage or 1
     stage = math.min(stage, 4)
     includePassive = includePassive and includePassive or true
-    onHit = onHit or false
     local result = source.TotalAD
     local k = 1
     if spell == "AA" then

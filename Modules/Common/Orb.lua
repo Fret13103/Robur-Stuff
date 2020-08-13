@@ -80,7 +80,7 @@ local function Set (list)
 end
 
 local IgnoreList = Set{"NidaleeSpear", "SRU_CampRespawnMarker", "SRU_Plant_Health", "SRU_Plant_Vision","SRU_Plant_Satchel",
-                       "ShenSpirit"}
+                       "ShenSpirit", "CaitlynTrap", "S5Test_WardCorpse"}
 
 function Orbwalker:GetTick()
     return math.floor(Game.GetTime() * 1000)

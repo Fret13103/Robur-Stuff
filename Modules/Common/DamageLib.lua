@@ -14,12 +14,14 @@ local BuffTypes = _Core.Enums.BuffTypes
 local DamageTypes = _Core.Enums.DamageTypes
 local Player = ObjectManager.Player
 
-local Epsilon = 0.00001 -- does lua have no float comparision ?
-
 local _Q = SpellSlots.Q
 local _W = SpellSlots.W
 local _E = SpellSlots.E
 local _R = SpellSlots.R
+
+function clamp(x, min, max)
+    return math.min(max, math.max(x,min) )
+end
 
 local Items ={
     Dorans_Shield = 1054,
@@ -39,48 +41,6 @@ end
 ---@return boolean
 function table.contains(table, value)
     return table[value] ~= nil
-end
-
-
----@param unit AIBaseClient
----@return number
-function GetHealthPercent(unit)
-    return 100 * unit.Health / unit.MaxHealth
-end
-
----@param unit AIBaseClient
----@return boolean
-function IsCritting(unit)
-    return math.abs(unit.CritChance - 1) < 0.001
-end
-
----@param unit AIBaseClient
----@param checkCrit boolean
----@return number
-function GetCritMultiplier(unit, checkCrit)
-    local crit = 1 -- todo Item infinity edge
-    checkCrit = checkCrit or false
-    if not checkCrit then
-        return crit + 1
-    end
-    if IsCritting(unit) then
-        return crit + 1
-    end
-    return 1
-end
-
-
----@param name string
----@return AIBaseClient/nil
-function GetBuddy(name)
-    local buddys = ObjectManager.Get("ally", "heroes")
-    for _, obj in pairs(buddys) do
-        local buddy = obj.AsHero
-        if buddy and buddy.CharName == name then
-            return buddy
-        end
-    end
-    return nil
 end
 
 ---@param unit AIBaseClient
@@ -173,251 +133,40 @@ local DamageReductionTable = {
     ["Malzahar"] =  {buff = "malzaharpassiveshield",    amount = function(target) return 0.9 end}
 }
 local AttackPassive = {
-    ["Aatrox"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "AatroxWPower") and HaveBuff(source, "AatroxWONHPowerBuff") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Akali"] = {
-        getDamage = function(source, target)
-            local raw = (0.06 + math.abs(source.TotalAP / 100)* 0.16667) * source.TotalAD
+    ["Aatrox"] = {getDamage = function(source, target)
+        if HaveBuff(source, "AatroxWPower") and HaveBuff(source, "AatroxWONHPowerBuff") then
+            return DmgLib:GetDamage("W", target)
+        end
+    end},
+    ["Alistar"] = {getDamage = function(source, target)
+        if HaveBuff(source,"alistartrample") then
+            local raw = 40 + source.Level* 10 + 0.1 * source.TotalAP
             return DmgLib:CalcMagicalDamage(source, target, raw)
-        end,
-        getDamage = function(source, target)
-            if target.HaveBuff(target, "AkaliMota") then
-                return DmgLib:GetDamage("Q", target, source, 1)
-            end
-        end},
-    ["Alistar"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source,"alistartrample") then
-                local raw = 40 + source.Level* 10 + 0.1 * source.TotalAP
-                return DmgLib:CalcMagicalDamage(source, target, raw)
-            end
-        end},
+        end
+    end},
     ["Ashe"] = {
         getDamage = function(source, target)
             if HaveBuff(target,"ashepassiveslow") then
                 local raw = source.TotalAD * (0.1 + (source.CritChance * (1 + source.CritDamageMultiplier)))
                 return DmgLib:CalcPhysicalDamage(source, target, raw)
             end
-        end,
+        end ,
         getDamage = function(source, target)
             if HaveBuff(source, "asheqattack") then
                 return DmgLib:GetDamage("Q",target)
             end
         end},
-    ["Bard"] = {
-        getDamage = function(source, target)
-            if (GetBuffCount(source, "bardpspiritammocount") > 0) then
-                local buffCount = GetBuffCount(source, "bardpdisplaychimecount")
-                local b = ({30, 55, 80, 110, 140, 175, 210, 245, 280, 315, 345, 375, 400, 425, 445, 465})[math.min(buffCount / 10,15)]
-                local raw = b + 0.3 * source.TotalAP
-                if buffCount > 150 then
-                    raw = raw + math.floor((buffCount - 150) / 5 + 0.5) * 20
-                end
-                return DmgLib:CalcMagicalDamage(source, target, raw)
+    ["Bard"] = {getDamage = function(source, target)
+        if (GetBuffCount(source, "bardpspiritammocount") > 0) then
+            local buffCount = GetBuffCount(source, "bardpdisplaychimecount")
+            local b = ({30, 55, 80, 110, 140, 175, 210, 245, 280, 315, 345, 375, 400, 425, 445, 465})[math.min(buffCount / 10,15)]
+            local raw = b + 0.3 * source.TotalAP
+            if buffCount > 150 then
+                raw = raw + math.floor((buffCount - 150) / 5 + 0.5) * 20
             end
-        end},
-    ["Blitzcrank"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "PowerFist") then
-                return DmgLib:GetDamage("E",target)
-            end
-        end},
-    ["Braum"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "braummarkstunreduction") then
-                local raw = 6.4 + (1.6 * source.Level)
-                return DmgLib:CalcMagicalDamage(source, target, raw)
-            end
-        end},
-    ["Caitlyn"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "caitlynheadshot") then
-                local raw = 1.5 * (source.BaseAttackDamage + source.FlatPhysicalDamageMod)
-                return DmgLib:CalcPhysicalDamage(source, target, raw)
-            end
-        end},
-    ["Camille"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "camiller") then
-                return DmgLib:GetDamage("R", target)
-            end
-        end},
-    ["ChoGath"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "VorpalSpikes") then
-                return DmgLib:GetDamage("E", target)
-            end
-        end},
-    ["Darius"] = {
-        getDamage = function(source, target)
-            local raw = ((9 + source.Level + (source.FlatPhysicalDamageMod * 0.3)) * math.min(GetBuffCount(target, "dariushemo") + 1, 5)) * target.IsMinion and 0.25 or 1
-            return DmgLib:CalcPhysicalDamage(source, target, raw)
-        end,
-        getDamage = function(source, target)
-            if HaveBuff(source, "DariusNoxianTacticsONH") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Diana"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "dianaarcready") then
-                local raw = 15 + source.Level < 6 and 5 or source-Level < 11 and 10 or source.Level < 14 and 15 or source.Level < 16 and 20 or 25 * source.Level + source.TotalAP * 0.8
-                DmgLib:CalcMagicalDamage(source, target, raw)
-            end
-        end},
-    ["DrMundo"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "Masochism") then
-                return DmgLib:GetDamage("E", target)
-            end
-        end},
-    ["Draven"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "DravenSpinning") then
-                local raw = 0.45 * (source.BaseAttackDamage + source.FlatPhysicalDamageMod)
-                return DmgLib:CalcPhysicalDamage(source, target, raw)
-            end
-        end},
-    ["Ekko"] = {
-        getDamage = function(source, target)
-            if GetBuffCount(target, "EkkoStacks") == 2 then
-                local raw = 10 + source.Level * 10 + source.TotalAP * 0.8
-                return DmgLib:CalcMagicalDamage(source, target, raw)
-            end
-        end,
-        getDamage = function(source, target)
-            if GetHealthPercent(target) < 30 then
-                local raw = (target.MaxHealth - target.Health) * (5 + math.floor(source.TotalAP/100) * 2.2) / 100
-                local dmg = DmgLib:CalcMagicalDamage(source, target, raw)
-                if not target.IsHero then dmg = math.min(150, dmg) end
-                return dmg
-            end
-        end},
-    ["Fizz"] = {
-        getDamage = function(source, target)
-            if source:GetSpell(_W).Level > 0 then
-                 return DmgLib:GetDamage("W", target) / 6
-            end
-        end,
-        getDamage = function(source, target)
-            if HaveBuff(source, "FizzSeastonePassive") then
-                 return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Garen"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "GarenQ") then
-                return DmgLib:GetDamage("Q", target)
-            end
-        end},
-    ["Gnar"] = {
-        getDamage = function(source, target)
-            if GetBuffCount(target, "gnarwproc") == 2 then
-                 return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Gragas"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "gragaswattackbuff") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Graves"] = {
-        getDamage = function(source, target)
-            local raw = ((72 + 3* source.Level)/100) *  DmgLib:CalcPhysicalDamage(source, target, source.TotalAD) -  DmgLib:CalcPhysicalDamage(source, target, source.TotalAD)
-            return raw
-        end},
-    ["Hecarim"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "hecarimrampspeed") then
-                return DmgLib:GetDamage("E", target)
-            end
-        end},
-    ["Illaoi"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "IllaoiW") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Irelia"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "ireliahitenstylecharged") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Ivern"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "ivernwpassive") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["JarvanIV"] = {
-        getDamage = function(source, target)
-            if not HaveBuff(target, "jarvanivmartialcadencecheck") then
-                local raw = math.min(target.Health * 0.1, 400)
-                return DmgLib:CalcPhysicalDamage(source, target, raw)
-            end
-        end},
-    ["Jax"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "JaxEmpowerTwo") then
-                return DmgLib:GetDamage("W", target)
-            end
-        end},
-    ["Jayce"] = {
-        getDamage = function(source, target)
-            if IsCritting(source) and not HaveBuff(source, "jaycehypercharge") then
-                local raw = GetCritMultiplier(source) * source.TotalAD
-                return DmgLib:CalcPhysicalDamage(source, target, raw)
-            end
-        end,
-        getDamage = function(source, target)
-            if HaveBuff(source, "jaycehypercharge") then
-                return DmgLib:GetDamage("W", target, 1)
-            end
-        end,
-        getDamage = function(source, target)
-            if HaveBuff(source, "jaycepassivemeleeattack") then
-                local dmg = 1.4 * source.TotalAD
-                return dmg
-            end
-        end},
-    ["Jhin"] = {
-        getDamage = function(source, target)
-            if HaveBuff(source, "jhinpassiveattackbuff") then
-                local raw = source.TotalAD * 0.5 + (target.MaxHealth - target.Health) * ({0.15, 0.2, 0.25})[math.min(3,source.Level / 5)]
-                return DmgLib:CalcPhysicalDamage(source, target, raw)
-            end
-        end},
-
-
-    --- Any Champ can Proc it
-    ["AnyChampion"] = {getDamage = function(source, target)
-            if GetBuffCount(target, "braummark") == 3 then
-            -- todo BuffInst.Caster
-            local braumLevel = GetBuddy("Braum").Level or 0
-            local raw = 32 + (8 * braumLevel)
             return DmgLib:CalcMagicalDamage(source, target, raw)
         end
-    end},
-
-
-    [""] = {
-        getDamage = function(source, target)
-
-        end},
-
-    [""] = {
-        getDamage = function(source, target)
-
-        end,
-        getDamage = function(source, target)
-
-        end},
+    end },
 }
 
 ---@param source AIBaseClient
@@ -471,13 +220,39 @@ end
 ---@param amount number
 ---@return number
 function DmgLib:CalcPhysicalDamage(source, target, amount)
+    target = target and target.Armor and target or target.AsAI
+
     local PercentArmorPen = source.PercentArmorPen
     local FlatArmorPen = source.FlatArmorPen
     local PercentBonusArmorPen = source.PercentBonusArmorPen
+    local mod = 1
     if source.IsMinion then
         PercentArmorPen = 1
         FlatArmorPen = 0
         PercentBonusArmorPen = 1
+
+        local friendlyheroes = ObjectManager.Get("ally", "heroes")
+        local enemyheroes = ObjectManager.Get("enemy", "heroes")
+
+        local favg = 0
+        local eavg = 0
+
+        for i,v in pairs(friendlyheroes) do
+            favg = favg + v.AsHero.Level
+        end
+
+        for i,v in pairs(enemyheroes) do
+            eavg = eavg + v.AsHero.Level
+        end
+
+        favg = favg / math.max(#friendlyheroes, 1)
+        eag = eavg / math.max(#enemyheroes, 1)
+
+        local lvldiff = clamp(favg-eavg, 0, 3)
+        mod = lvldiff > 0 and (1 + .05 * lvldiff) or mod
+
+        mod = target.IsMinion and mod or 1
+
     elseif source.IsTurret then
         FlatArmorPen = 0
         PercentBonusArmorPen = 1
@@ -487,15 +262,17 @@ function DmgLib:CalcPhysicalDamage(source, target, amount)
             PercentArmorPen = 0.7
         end
         if target.IsMinion then
-            amount = amount*1.25
+            amount = amount*1.125
             if string.ends(target.CharName, "MinionSiege") then
                 amount = amount*0.7
+            elseif string.ends(target.CharName, "MinionRanged") then
+                amount = amount*.875/1.125
             end
             return amount
         end
     end
-    local armor = target.Armor
-    local bonusArmor = target.BonusArmor
+    local armor = target.Armor or target.AsAI.Armor
+    local bonusArmor = target.BonusArmor or target.AsAI.BonusArmor
     local val = 0
     if armor < 0 then
         val = 2 - 100 / (100 - armor)
@@ -504,7 +281,7 @@ function DmgLib:CalcPhysicalDamage(source, target, amount)
     else
         val = 100 / (100 + armor*PercentArmorPen - bonusArmor*(1-PercentBonusArmorPen) - FlatArmorPen)
     end
-    return math.max(0, math.floor(DamageReductionMod(source, target, PassivePercentMod(source, target, val) * amount, DamageTypes.Physical)))
+    return math.max(0, math.floor(DamageReductionMod(source, target, PassivePercentMod(source, target, val) * amount, DamageTypes.Physical))) * mod
 end
 
 ---@param source AIBaseClient
@@ -572,10 +349,9 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
         end
         --ChampionPassiveDamage
         local name = source.CharName
-        if AttackPassive[name] then
-            for i, f in ipairs(AttackPassive[name]) do
-                result = result + f.getDamage(source, target) or 0
-            end
+        for i, f in ipairs(AttackPassive[name]) do
+            INFO(tostring(i) .. " " .. tostring(f))
+            result = result + f.getDamage(source, target) or 0
         end
 
         if source.IsHero and source.CharName == "Corki" then

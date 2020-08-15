@@ -46,7 +46,6 @@ end
 function OnLoad()
     if Player.CharName == "Ashe" then
         Orb.Load()
-        Orb.Setting.Drawing.BoundingRadius.EnemyMinion.Active = false
         EventManager.RegisterCallback(Events.OnTick, OnTick)
         return true
     end

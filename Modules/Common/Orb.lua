@@ -1,11 +1,7 @@
 require("common.log")
 module("Lib_Orb", package.seeall, log.setup)
 
-_G.OrbTarget = nil
-_G.OrbActive = true
-
 local DMGLib = require("lol/Modules/Common/DamageLib")
-
 local ts = require("lol/Modules/Common/simpleTS")
 
 local _Core = _G.CoreEx
@@ -19,57 +15,72 @@ local BuffTypes = _Core.Enums.BuffTypes
 local Player = ObjectManager.Player
 
 local Orbwalker = {
-    Loaded = false,
-    CurrentTarget = nil,
     Setting = {
+        AllowMovement = true,
+        AllowAttack = true,
         Key = {
             Combo = 32, -- Spacebar
             LastHit = 88, -- X
             Harras = 67, -- C
             LaneClear = 86, -- V
+            LaneFreeze = 89, -- Y
+            Flee = 84, -- T
         },
-        WindUp = 40,
-        MinDelay = 50,
-        MovementDelay = 100,
+        MovementDelay = 100, -- Lower = Smoother but also unsafe when you click faster then light, tofast clicks can lead to dc
         Drawing = {
             Quality = 30,
             AttackRange = {
-                Own = true,
-                OwnColor = 0xFFFFFFFF,
-                Enemy = true,
-                Distance = 1000 -- Additional to Enemy AttackRange
-            },
-            BoundingRadius = {
-                Own = true,
-                OwnColor = 0xFFFFFFFF,
-                EnemyMinion = {
+                Own = {
+                    Active = true,
+                    Color = 0xFFFFFFFF,
+                },
+                Enemy = {
                     Active = true,
                     Color = 0xFF00FFFF,
-                },
-                EnemyHero = {
+                    Distance = 500,
+                }
+            },
+            BoundingRadius = {
+                Own = {
                     Active = true,
-                    Color = 0xBFBFBFFF,
+                    Color = 0xFFFFFFFF
+                },
+                Enemy= {
+                    Minion = {
+                        Active = false,
+                        Color = 0xFF00FFFF,
+                        Distance = 1000
+                    },
+                    Hero = {
+                        Active = true,
+                        Color = 0xBFBFBFFF,
+                        Distance = 500
+                    }
                 }
             }
         }
     },
     Mode = {
         Combo = false,
-        LastHit = false,
-        Harras = false,
         LaneClear = false,
+        Harras = false,
+        LastHit = false,
+        LaneFreeze = false,
     },
-    LastMove = {
-        Tick = 0,
-        Pos = nil
-    },
-    LastAttack = {
-        Tick = 0,
-        Target = nil,
+    Data = {
+        LastMove = {
+            Time = 0,
+            Position = nil,
+        },
+        LastAttack = {
+            Time = 0,
+            Target = nil,
+            Confirmed = false,
+        }
     },
     Override = {
-        ForceMovePos = nil,
-        ForceTarget = nil,
+        Target = nil,
+        Position = nil,
     }
 }
 
@@ -79,347 +90,192 @@ local function Set (list)
   return set
 end
 
-local IgnoreList = Set{"NidaleeSpear", "SRU_CampRespawnMarker", "SRU_Plant_Health", "SRU_Plant_Vision","SRU_Plant_Satchel",
-                       "ShenSpirit", "CaitlynTrap", "S5Test_WardCorpse"}
+local _MinionList = Set{"SRU_OrderMinionMelee", "SRU_OrderMinionRanged", "SRU_OrderMinionSiege",
+                        "SRU_ChaosMinionMelee", "SRU_ChaosMinionRanged", "SRU_ChaosMinionSiege" }
 
-function Orbwalker:GetTick()
-    return math.floor(Game.GetTime() * 1000)
+local _AutoAttack_Attacks = Set{"caitlynheadshotmissile", "frostarrow", "garenslash2", "kennenmegaproc",
+                                "lucianpassiveattack", "masteryidoublestrike", "quinnwenhanced", "renektonexecute",
+                                "renektonsuperexecute", "rengarnewpassivebuffdash", "trundleq", "xenzhaothrust",
+                                "viktorqbuff", "xenzhaothrust2", "xenzhaothrust3"}
+
+local _AutoAttack_NoAttacks = Set{"jarvanivcataclysmattack", "monkeykingdoubleattack", "shyvanadoubleattack",
+                                  "shyvanadoubleattackdragon", "zyragraspingplantattack", "zyragraspingplantattack2",
+                                  "zyragraspingplantattackfire", "zyragraspingplantattack2fire"}
+
+local _AutoAttack_AttackReset = Set{"dariusnoxiantacticsonh", "fioraflurry", "garenq", "hecarimrapidslash",
+                                    "jaxempowertwo", "jaycehypercharge", "leonashieldofdaybreak",
+                                    "monkeykingdoubleattack", "mordekaisermaceofspades", "nasusq",
+                                    "nautiluspiercinggaze", "netherblade", "parley", "poppydevastatingblow",
+                                    "powerfist", "renektonpreexecute", "rengarq", "shyvanadoubleattack", "sivirw",
+                                    "takedown", "talonnoxiandiplomacy", "trundletrollsmash", "vaynetumble", "vie",
+                                    "volibearq", "xenzhaocombotarget", "yorickspectral"}
+
+local function AsTime(value)
+    return value / 1000
 end
 
-function Orbwalker:ResetAutoAttack(d)
-    d = d or 0
-    if d == 0 then
-        Orbwalker.LastAttack.Tick = 0
-    else
-        delay(d, function () Orbwalker.LastAttack.Tick = 0 end)
-    end
+local function AsTick(value)
+    return value * 1000
 end
 
-function Orbwalker:ResetLastMove()
-        Orbwalker.LastMove.Tick = 0
+local function IsAutoAttackReset(name)
+    return _AutoAttack_AttackReset[name:lower()]
 end
 
-function Orbwalker:GetModDelay()
-    local ping = Game.GetLatency()
-    local addValue = 0
-    if ping >= 100 then
-        addValue = ping / 100 * 10
-    elseif ping >  Orbwalker.Setting.MinDelay and ping < 100 then
-        addValue = ping / 100 * 15
-    else
-        addValue = ping / 100 * 25 + Orbwalker.Setting.MinDelay
-    end
-    addValue = addValue + Orbwalker.Setting.WindUp
-    return addValue
+local function IsAutoAttack(name)
+    return (string.match(name:lower(), "attack") and not _AutoAttack_NoAttacks[name:lower()]) or
+            _AutoAttack_Attacks[name:lower()]
 end
 
-function Orbwalker:GetAttackRange(source, target)
-    source = source or Player
-    local dist = source.AttackRange + source.BoundingRadius
-    if target then
-        dist = dist + target.BoundingRadius
-        if target.IsHero then
-            dist = dist - 25
-        end
-    end
-    return dist
-end
+local function Custom_Lasthit_Logic()
+    -- Custom LastHit Logic for Champions
 
-function Orbwalker:InAttackRange(target)
-    if target and target.IsValid then
-        return Player.Position:Distance(target.Position) < Orbwalker:GetAttackRange(Player,target)
-    end
-end
-
-function Orbwalker:HasBuffType(unit,buffType)
-    local ai = unit.AsAI
-    if ai and ai.IsValid then
-        for i = 0, ai.BuffCount do -- unit.BuffCount returns nil
-            local buff = ai:GetBuff(i)
-            if buff and buff.IsValid and buff.BuffType == buffType then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function starts_with(str, start)
-   return str:sub(1, #start) == start
-end
-
-local function ends_with(str, ending)
-   return ending == "" or str:sub(-#ending) == ending
-end
-
-
-function Orbwalker:IsValidAutoAttackTarget(obj)
-    local unit = obj.AsAttackableUnit
-    if not obj.IsAlive or not obj.IsTargetable then return false end
-    if IgnoreList[obj.CharName] then return false end
-    if unit and  not unit.IsDead and unit.Health > 0 then
-        if starts_with(tostring(obj.IsAlive),"function: ") then return false end
-        local range = Orbwalker:GetAttackRange(Player, unit)
-        if Player.Position:Distance(unit.Position) < range then
-            if not Orbwalker:HasBuffType(unit, BuffTypes.Invulnerability) or not unit.IsDodgingMissiles then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function TempGetLastHitMinion()
-    local minions = ObjectManager.Get("enemy", "minions")
-    local tempMinion = nil
-    for _, obj in pairs(minions) do
-        local minion = obj.AsMinion
-        if minion and Orbwalker:IsValidAutoAttackTarget(minion) and DMGLib:GetDamage("AA", minion) > minion.Health then
-            if tempMinion == nil or minion.Health < tempMinion.Health then
-                tempMinion = minion
-            end
-        end
-    end
-    if tempMinion ~= nil then return tempMinion end
-end
-
-local function TempGetLaneClearTarget()
-    local turrets = ObjectManager.Get("enemy","turrets")
-    for _, obj in pairs(turrets) do
-        local turret = obj.AsTurret
-        if turret and Orbwalker:IsValidAutoAttackTarget(turret) then
-            return turret
-        end
-    end
-
-    local inhibs = ObjectManager.Get("enemy","inhibitors")
-    for _, obj in pairs(inhibs) do
-        local inhib = obj.AsAttackableUnit
-        if inhib and Orbwalker:IsValidAutoAttackTarget(inhib) then
-            return inhib
-        end
-    end
-
-    local hqs = ObjectManager.Get("enemy","hqs")
-    for _, obj in pairs(hqs) do
-        local hq = obj.AsAttackableUnit
-        if hq and Orbwalker:IsValidAutoAttackTarget(hq) then
-            return hq
-        end
-    end
-
-    local enemies = ObjectManager.Get("enemy", "heroes")
-    local tempHero = nil
-    for _, obj in pairs(enemies) do
-        local hero = obj.AsHero
-        if hero and Orbwalker:IsValidAutoAttackTarget(hero) then
-            if tempHero == nil or hero.Health < tempHero.Health then
-                tempHero = hero
-            end
-        end
-    end
-    if tempHero ~= nil then return tempHero end
-
-    local minions = ObjectManager.Get("enemy", "minions")
-    local tempMinion = nil
-    for _, obj in pairs(minions) do
-        local minion = obj.AsMinion
-        if minion and Orbwalker:IsValidAutoAttackTarget(minion) then
-            if tempMinion == nil or minion.Health < tempMinion.Health then
-                tempMinion = minion
-            end
-        end
-    end
-    if tempMinion ~= nil then return tempMinion end
-
-    local wards = ObjectManager.Get("enemy", "wards")
-    local tempWard = nil
-    for _, obj in pairs(wards) do
-        local ward = obj.AsAttackableUnit
-        if ward and Orbwalker:IsValidAutoAttackTarget(ward) then
-            if tempWard == nil or ward.Health < tempWard.Health then
-                tempWard = ward
-            end
-        end
-    end
-    if tempWard ~= nil then return tempWard end
-
-    minions = ObjectManager.Get("neutral", "minions")
-    tempMinion = nil
-    for _, obj in pairs(minions) do
-        local minion = obj.AsMinion
-        if minion and Orbwalker:IsValidAutoAttackTarget(minion) then
-            if tempMinion == nil or minion.Health < tempMinion.Health then
-                tempMinion = minion
-            end
-        end
-    end
-    if tempMinion ~= nil then return tempMinion end
     return nil
 end
 
-function Orbwalker:CanAttack()
-    local tick = Orbwalker:GetTick()
-    return Orbwalker.LastAttack.Tick + Player.AttackDelay*1000 + Orbwalker:GetModDelay() <= tick
+local function Basic_Lasthit_Logic()
+    -- Basic LastHit Logic for Most Champions
+    local minions = ObjectManager.Get("all", "minions")
+    for _, obj in pairs(minions) do
+        local minion = obj.AsMinion
+        if minion and minion.IsVisible and not minion.IsDead and Orbwalker:IsValidMinion(minion) and Orbwalker.IsValidAutoAttackTarget(minion)  then
+            local t = Player.AttackCastDelay * 1000 - 100 + Game.GetLatency() / 2 + 1000 * Player.Position:Distance(minion.Position) / Orbwalker:MyProjectileSpeed()
+            --local health = DMGLib:GetPredictedHealth(minion, t)
+
+        end
+    end
 end
 
-function Orbwalker:CanWalk()
-    local tick = Orbwalker:GetTick()
-    if Orbwalker.LastMove.Tick + Orbwalker.Setting.MovementDelay <= tick then
-        return tick + Game.GetLatency() / 2 >= Orbwalker.LastAttack.Tick + Player.AttackCastDelay*1000 + Orbwalker:GetModDelay()
+function Orbwalker:MyProjectileSpeed()
+    if PLayer.CharName == "Azir" or Player.CharName == "Kayle" or Player.AttackRange <= 325 then
+        return Player.AttackData.MissileMaxSpeed
+    else
+        return Player.AttackData.MissileSpeed
     end
+end
+
+function Orbwalker:GetAttackRange(target, source)
+    source = source or Player
+    local range = source.AttackRange + source.BoundingRadius
+    if target then
+        range = range + target.BoundingRadius
+        if target.IsHero then
+            range = range - 25
+        end
+    end
+    return range
+end
+
+function Orbwalker:IsValidAutoAttackTarget(unit)
+    if unit == nil then return false end
+    if unit.IsDead then return false end
+    if not unit.IsVisible then return false end
+    if not Orbwalker:IsInAutoAttackRange(unit, Player) then return false end
+    return true
+end
+
+function Orbwalker:IsValidMinion(unit)
+    if unit == nil then return false end
+    if _MinionList[unit.CharName] then return true end
     return false
 end
 
+function Orbwalker:IsInAutoAttackRange(target, source)
+    source = source or Player
+    return source.Position:Distance(target.Position) <= Orbwalker:GetAttackRange(target, source)
+end
+
 function Orbwalker:GetMovePos()
-    if Orbwalker.Override.ForceMovePos ~= nil then
-        return Orbwalker.Override.ForceMovePos
+    if Orbwalker.Override.Position ~= nil then
+        return Orbwalker.Override.Position
     end
-    return Renderer.GetMousePos()
+    local mousePos = Renderer.GetMousePos()
+    return mousePos
+end
+
+function Orbwalker:GetBestPossibleTarget()
+    -- Costum Set Target by Script, Highest Prio
+    local TempTarget = Orbwalker.Override.Target
+    if TempTarget then
+        if Orbwalker:IsValidAutoAttackTarget(TempTarget) then
+            return TempTarget
+        end
+        TempTarget = nil
+    end
+
+    if (Orbwalker.Mode.Harras or Orbwalker.Mode.LastHit or Orbwalker.Mode.LaneClear  or Orbwalker.Mode.LaneFreeze) then
+        TempTarget = Custom_Lasthit_Logic() or Basic_Lasthit_Logic()
+        if TempTarget then return TempTarget end
+    end
+end
+
+function Orbwalker:MinPingCalc()
+
+    local minPing = 40
+    local value = 0
+    if Game.GetLatency() > 100 then
+        value = minPing + Game.GetLatency() * 0.1
+    elseif Game.GetLatency() > 50 then
+        value = minPing + Game.GetLatency() * 0.5
+    else
+        value = minPing + Game.GetLatency() * 1.5
+    end
+    return AsTime(value)
+end
+
+function Orbwalker:AttackDelay()
+    -- For Champ Specific use Later
+    return 0
+end
+
+function Orbwalker:WalkDelay()
+    -- For Champ Specific use Later
+    return Orbwalker:MinPingCalc()
 end
 
 
-local function PrintIfSuspect(unit)
-    if unit.IsHero then return end
-    local name = unit.Name
-    if starts_with(name, "Minion_") then return end
-    if starts_with(name, "SRU_") then return end
-    if starts_with(name, "Turret_") then return end
-    if starts_with(name, "Barracks_") then return end
-    if starts_with(name, "HQ_") then return end
-    if starts_with(name, "Sru_") then return end
-    if starts_with(name, "MiniKrug") then return end
-    INFO("Attacked: ".. string.lower(name))
-    if unit.CharName ~= nil then
-        INFO("CharName: ".. tostring(unit.CharName))
+function Orbwalker:CanAttack()
+    if Orbwalker.Setting.AllowAttack and Orbwalker.Data.LastAttack.Time + Player.AttackDelay - Player.AttackCastDelay <= Game.GetTime() then
+        return true
     end
-    if unit.IsDead ~= nil then
-        INFO("IsDead: ".. tostring(unit.IsDead))
-    end
-    if unit.IsZombie ~= nil then
-        INFO("IsZombie: ".. tostring(unit.IsZombie))
-    end
-    if unit.TypeFlags ~= nil then
-        INFO("TypeFlags: ".. tostring(unit.TypeFlags))
-    end
-    if unit.IsWard ~= nil then
-        INFO("IsWard: ".. tostring(unit.IsWard))
-    end
-    if unit.IsParticle ~= nil then
-        INFO("IsParticle: ".. tostring(unit.IsParticle))
-    end
-    if unit.IsAttackableUnit ~= nil then
-        INFO("IsAttackableUnit: ".. tostring(unit.IsAttackableUnit))
-    end
-    if unit.IsAI ~= nil then
-        INFO("IsAI: ".. tostring(unit.IsAI))
-    end
-    if unit.IsMinion ~= nil then
-        INFO("IsMinion: ".. tostring(unit.IsMinion))
-    end
-      if unit.IsTurret ~= nil then
-        INFO("IsTurret: ".. tostring(unit.IsTurret))
-    end
-      if unit.IsNexus ~= nil then
-        INFO("IsNexus: ".. tostring(unit.IsNexus))
-    end
-      if unit.IsInhibitor ~= nil then
-        INFO("IsInhibitor: ".. tostring(unit.IsInhibitor))
-    end
-      if unit.IsBarracks ~= nil then
-        INFO("IsBarracks: ".. tostring(unit.IsBarracks))
-    end
-      if unit.IsStructure ~= nil then
-        INFO("IsStructure: ".. tostring(unit.IsStructure))
-    end
-      if unit.IsShop ~= nil then
-        INFO("IsShop: ".. tostring(unit.IsShop))
-    end
-    if unit.IsWard ~= nil then
-        INFO("IsWard: ".. tostring(unit.IsWard))
-    end
-    if unit.IsShop ~= nil then
-        INFO("IsShop: ".. tostring(unit.IsShop))
-    end
-    if unit.BoundingRadius ~= nil then
-        INFO("BoundingRadius: ".. tostring(unit.BoundingRadius))
-    end
-    if unit.BBoxMin ~= nil then
-        INFO("BBoxMin: ".. tostring(unit.BBoxMin))
-    end
-    if unit.BBoxMax ~= nil then
-        INFO("BBoxMax: ".. tostring(unit.BBoxMax))
-    end
-    if unit.Health ~= nil then
-        INFO("Health: ".. tostring(unit.Health))
-    end
-     if unit.MaxHealth ~= nil then
-        INFO("MaxHealth: ".. tostring(unit.MaxHealth))
-    end
-     if unit.MaxMana ~= nil then
-        INFO("MaxMana: ".. tostring(unit.MaxMana))
-    end
-     if unit.Mana ~= nil then
-        INFO("Mana: ".. tostring(unit.Mana))
-    end
-     if unit.IsAlive ~= nil then
-        INFO("IsAlive: ".. tostring(unit.IsAlive))
-    end
-     if unit.IsStealthed ~= nil then
-        INFO("IsStealthed: ".. tostring(unit.IsStealthed))
-    end
-     if unit.IsDodgingMissiles ~= nil then
-        INFO("IsDodgingMissiles: ".. tostring(unit.IsDodgingMissiles))
-    end
- if unit.CanAttack ~= nil then
-        INFO("CanAttack: ".. tostring(unit.CanAttack))
-    end
-
-    INFO("--------")
+    return false
 end
 
 function Orbwalker:Attack()
     if Orbwalker:CanAttack() then
-        if _G.OrbTarget ~= nil then Orbwalker.Override.ForceTarget = _G.OrbTarget end
-        local target = Orbwalker.Override.ForceTarget
-        if target == nil then
-            if Orbwalker.Mode.Combo then
-                target = ts:GetTarget(Player.AttackRange, ts.Priority.LowestHealth)
-                Orbwalker.CurrentTarget = target
-            elseif Orbwalker.Mode.LaneClear then
-                target = TempGetLaneClearTarget()
-            elseif Orbwalker.Mode.LastHit then
-                target = TempGetLastHitMinion()
-            end
+        local Args = { Process = true}
+        Args.Target = Orbwalker.Override.Target or ts:GetTarget(Player.AttackRange - 25, ts.Priority.LowestHealth)
+        EventManager.FireEvent(Events.OnPreAttack, Args)
+        if Args.Target ~= nil and Args.Process and Orbwalker:IsValidAutoAttackTarget(Args.Target) then
+            Orbwalker.Data.LastAttack.Confirmed = false
+            Input.Attack(Args.Target)
+            Orbwalker.Data.LastAttack.Time = Game.GetTime() + AsTime(Game.GetLatency() / 2 + 5)
+            Orbwalker.Data.LastAttack.Target = Args.Target
+            Orbwalker.Override.Target = nil
         end
-        if target ~= nil then
-            local args = {Target=target,Process=true}
-            EventManager.FireEvent(Events.OnPreAttack, args)
-            if args.Process then
-                Input.Attack(args.Target)
-                PrintIfSuspect(args.Target)
-                Orbwalker:ResetLastMove()
-                Orbwalker.LastAttack.Tick = Orbwalker:GetTick()
-                Orbwalker.LastAttack.Target = args.Target
-                delay(250, function () EventManager.FireEvent(Events.OnPostAttack, args.Target) end)
-            end
-        end
-        Orbwalker.Override.ForceTarget = nil
-        _G.OrbTarget = nil
     end
+end
+
+function Orbwalker:CanWalk()
+    if  Orbwalker.Setting.AllowMovement and  Orbwalker.Data.LastMove.Time + AsTime(Orbwalker.Setting.MovementDelay) <= Game.GetTime() then
+        return Orbwalker.Data.LastAttack.Confirmed or Orbwalker.Data.LastAttack.Time + Player.AttackCastDelay + Orbwalker:WalkDelay() <= Game.GetTime()
+    end
+    return false
 end
 
 function Orbwalker:Walk()
     if Orbwalker:CanWalk() then
-        local pos = Orbwalker.GetMovePos()
-        -- todo OnPreMove
-        local args = {Position=pos,Process=true}
-        EventManager.FireEvent(Events.OnPreMove, args)
-        if args.Process then
-            Input.MoveTo(args.Position)
-            Orbwalker.LastMove.Tick = Orbwalker:GetTick()
-            Orbwalker.LastMove.Pos = args.Position
-            delay(25, function () EventManager.FireEvent(Events.OnPostMove, args.Position) end)
+        pos = Orbwalker:GetMovePos()
+        Args = {Process = true, Position = pos}
+        EventManager.FireEvent(Events.OnPostMove, Args)
+        if Args.Process then
+            Input.MoveTo(Args.Position)
+            Orbwalker.Data.LastMove.Time = Game.GetTime() + AsTime(Game.GetLatency() / 2 + 5)
+            Orbwalker.Data.LastMove.Position = Args.Position
+            Orbwalker.Override.Position = nil
+            delay(Game.GetLatency() / 2 + 5, function ()
+                EventManager.FireEvent(Events.OnPostMove, Args.Position)
+            end)
         end
     end
 end
@@ -429,67 +285,66 @@ function Orbwalker:Orbwalk()
     Orbwalker:Walk()
 end
 
-local function OnPreMove(pos)
-    --INFO("OnPreMove: x:"..pos.x.." y:"..pos.y.."z:"..pos.z)
-end
-
-local function OnPostMove(pos)
-     --INFO("OnPostMove: x:"..pos.x.." y:"..pos.y.."z:"..pos.z)
-end
-
-local function OnPreAttack(target)
-     --INFO("OnPreAttack:"..target.CharName)
-end
-
-local function OnPostAttack(target)
-     --INFO("OnPostAttack:"..target.CharName)
-end
-
-local function OnBasicAttack(obj, spellCast)
-    if obj then
-        --INFO(obj.CharName)
-    end
-end
-
-local function OnTick()
+local function OnUpdate()
     if Game.IsChatOpen() then return end
+    if Game.IsMinimized() then return end
     if Player.IsDead then return end
 
-    if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LastHit then
+    if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LastHit or
+            Orbwalker.Mode.Harras or Orbwalker.Mode.Flee or Orbwalker.Mode.LaneFreeze then
         Orbwalker.Orbwalk()
     end
 end
 
 local function OnDraw()
     local drawing = Orbwalker.Setting.Drawing
-    if (drawing.AttackRange.Own) then
-         Renderer.DrawCircle3D(Player.Position, Orbwalker:GetAttackRange(), drawing.Quality,1, drawing.AttackRange.OwnColor)
+    if (drawing.AttackRange.Own.Active) then
+         Renderer.DrawCircle3D(Player.Position, Orbwalker:GetAttackRange(), drawing.Quality,1, drawing.AttackRange.Own.Color)
     end
-    if (drawing.BoundingRadius.Own) then
-         Renderer.DrawCircle3D(Player.Position, Player.BoundingRadius, drawing.Quality,1, drawing.AttackRange.OwnColor)
+    if (drawing.BoundingRadius.Own.Active) then
+         Renderer.DrawCircle3D(Player.Position, Player.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.Own.Color)
     end
-    if (drawing.BoundingRadius.EnemyMinion.Active) then
+    if (drawing.BoundingRadius.Enemy.Minion.Active) then
          local minions = ObjectManager.Get("enemy", "minions")
          for _, obj in pairs(minions) do
              local minion = obj.AsMinion
-             if minion and minion.IsVisible and minion.Health > 0 and Player.Position:Distance(minion.Position) <= Orbwalker:GetAttackRange() then
-                 Renderer.DrawCircle3D(minion.Position, minion.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.EnemyMinion.Color)
+             if minion and minion.IsVisible and not minion.IsDead and Player.Position:Distance(minion.Position) <= Orbwalker:GetAttackRange(minion) + drawing.BoundingRadius.Enemy.Minion.Distance then
+                 Renderer.DrawCircle3D(minion.Position, minion.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.Enemy.Minion.Color)
              end
         end
     end
-    if (drawing.BoundingRadius.EnemyHero.Active or drawing.AttackRange.Enemy) then
+    if (drawing.BoundingRadius.Enemy.Hero.Active or drawing.AttackRange.Enemy.Active) then
          local heroes = ObjectManager.Get("enemy", "heroes")
          for _, obj in pairs(heroes) do
              local hero = obj.AsHero
-             if hero  and hero.IsVisible and hero.Health > 0  and Player.Position:Distance(hero.Position) <= Orbwalker:GetAttackRange() + drawing.AttackRange.Distance then
-                 if drawing.BoundingRadius.EnemyHero.Active then
-                     Renderer.DrawCircle3D(hero.Position, hero.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.EnemyHero.Color)
+             if hero  and hero.IsVisible and not hero.IsDead and Player.Position:Distance(hero.Position) <= Orbwalker:GetAttackRange() + drawing.BoundingRadius.Enemy.Hero.Distance then
+                 if drawing.BoundingRadius.Enemy.Hero.Active then
+                     Renderer.DrawCircle3D(hero.Position, hero.BoundingRadius, drawing.Quality,1, drawing.BoundingRadius.Enemy.Hero.Color)
                  end
-                 if drawing.AttackRange.Enemy then
-                     Renderer.DrawCircle3D(hero.Position, Orbwalker:GetAttackRange(hero), drawing.Quality,1, drawing.BoundingRadius.EnemyHero.Color)
+                 if drawing.AttackRange.Enemy.Active then
+                     Renderer.DrawCircle3D(hero.Position, Orbwalker:GetAttackRange(hero), drawing.Quality,1, drawing.AttackRange.Enemy.Color)
                  end
              end
         end
+    end
+end
+
+local function OnCreateObject(obj)
+    if obj then
+        local missile = obj.AsMissile
+        if missile and missile.Source and missile.Target and missile.Source.Ptr == Player.Ptr then
+            if IsAutoAttack(missile.Name) then
+                Orbwalker.Data.LastAttack.Confirmed = true
+                Orbwalker.Data.LastAttack.Time = Game.GetTime()
+                EventManager.FireEvent(Events.OnPostAttack, missile.Target)
+            end
+        end
+    end
+    local hero = obj.AsHero
+    if hero and hero.IsMe then
+        Orbwalker.Data.LastAttack.Confirmed = true
+        Orbwalker.Data.LastAttack.Time = Game.GetTime()
+        --EventManager.FireEvent(Events.OnPostAttack, spellCast.Target)
     end
 end
 
@@ -497,13 +352,8 @@ function Orbwalker.Load()
     if not Orbwalker.Loaded then
         Orbwalker.Loaded = true
         EventManager.RegisterCallback(Events.OnDraw, OnDraw)
-        EventManager.RegisterCallback(Events.OnTick, OnTick)
-        EventManager.RegisterCallback(Events.OnBasicAttack, OnBasicAttack)
-
-        EventManager.RegisterCallback(Events.OnPreMove, OnPreMove)
-        EventManager.RegisterCallback(Events.OnPostMove, OnPostMove)
-        EventManager.RegisterCallback(Events.OnPreAttack, OnPreAttack)
-        EventManager.RegisterCallback(Events.OnPostAttack, OnPostAttack)
+        EventManager.RegisterCallback(Events.OnUpdate, OnUpdate)
+        EventManager.RegisterCallback(Events.OnCreateObject, OnCreateObject)
 
         local Key = Orbwalker.Setting.Key
         EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)
@@ -514,7 +364,10 @@ function Orbwalker.Load()
         EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Harras then Orbwalker.Mode.Harras = false end end)
         EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = true  end end)
         EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LaneClear then Orbwalker.Mode.LaneClear = false end end)
-        _G.OrbActive = true
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.LaneFreeze then Orbwalker.Mode.LaneFreeze = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.LaneFreeze then Orbwalker.Mode.LaneFreeze = false end end)
+        EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Flee then Orbwalker.Mode.Flee = true  end end)
+        EventManager.RegisterCallback(Events.OnKeyUp,   function(keycode, _, _) if keycode == Key.Flee then Orbwalker.Mode.Flee = false end end)
     end
 end
 

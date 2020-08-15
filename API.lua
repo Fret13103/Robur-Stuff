@@ -413,7 +413,11 @@ local SpellData
 ---@field EndTime number
 ---@field CastEndTime number
 ---@field IsBasicAttack boolean
----@field IsSpecialAttack boolean
+---@field IsBeingCast boolean
+---@field IsBeingCharged boolean
+---@field StoppedBeingCharged boolean
+---@field SpellWasCast boolean
+
 local SpellCast
 
 --[[
@@ -426,6 +430,7 @@ local SpellCast
 ---@class BuffInst
 ---@field IsValid bool
 ---@field Name string
+---@field Source AIBaseClient
 ---@field BuffType Enum_BuffTypes
 ---@field Count integer
 ---@field StartTime number
@@ -440,6 +445,18 @@ local SpellCast
 ---@field IsSlow bool
 ---@field IsDisarm bool
 local BuffInst
+
+---@class Pathing
+---@field Velocity Vector
+---@field StartPos Vector
+---@field EndPos Vector
+---@field IsMoving boolean
+---@field IsDashing boolean
+---@field DashGravity number
+---@field DashSpeed number
+---@field CurrentWaypoint integer
+---@field Waypoints Vector[]
+local Pathing
 
 --[[
      ██████   █████  ███    ███ ███████      ██████  ██████       ██ ███████  ██████ ████████ 
@@ -588,11 +605,11 @@ local AttackableUnit
 ---@field PrimaryResourceBaseRegen number
 ---@field SecondaryResourceRegen number
 ---@field SecondaryResourceBaseRegen number
----@field IsCasting boolean @Not Implemented
+---@field IsCasting boolean
 ---@field IsChanneling boolean @Not Implemented
 ---@field SkinId integer @Not Implemented
----@field AttackData Pointer @Not Implemented
----@field AttackData2 Pointer @Not Implemented
+---@field AttackData Pointer
+---@field AttackData2 Pointer
 ---@field BaseAD number
 ---@field BonusAD number
 ---@field TotalAD number
@@ -607,6 +624,7 @@ local AttackableUnit
 ---@field AttackDelay number
 ---@field AttackCastDelay number
 ---@field ActiveSpell SpellCast
+---@field Pathing Pathing
 ---@field HealthBarScreenPos Vector
 ---@field BuffCount integer
 ---@field Direction Vector
@@ -928,17 +946,18 @@ _G.CoreEx.Enums.SpellStates = SpellStates
 ---@field OnDraw string                @[[Screen Refresh Rate]] void OnDraw()
 ---@field OnDrawHUD string             @[[Screen Refresh Rate]] void OnDrawHUD()
 ---@field OnKey string                 @[[KeyPress]] void OnKey(e, message, wparam, lparam)
+---@field OnMouseEvent string          @[[KeyPress]] void OnMouseEvent(e, message, wparam, lparam)
 ---@field OnKeyDown string             @[[KeyPress]] void OnKeyDown(keycode, char, lparam)
 ---@field OnKeyUp string               @[[KeyPress]] void OnKeyUp(keycode, char, lparam)
 ---@field OnCreateObject string        @[[After Creation]] void OnCreateObject(obj)
 ---@field OnDeleteObject string        @[[Before Deletion]] void OnDeleteObject(obj)
----@field OnCastSpell string           @[[Local Hero Casts]] NOT IMPLEMENTED [WIP]
+---@field OnCastSpell string           @[[Change/Block Player Casts]] void OnIssueOrder(Args) --Args={Process, Slot, StartPosition, TargetPosition, Target}
 ---@field OnProcessSpell string        @[[Animation Start]] void OnProcessSpell(obj, spellcast)
 ---@field OnSpellCast string           @[[Animation End]] NOT IMPLEMENTED [WIP]
 ---@field OnCastStop string            @[[Animation Interrupted]] NOT IMPLEMENTED [WIP]
 ---@field OnBasicAttack string         @[[Animation Start]] void OnBasicAttack(obj, spellcast)
----@field OnNewPath string             @[[Animation Start]] NOT IMPLEMENTED [WIP]
----@field OnIssueOrder string          @[[Local Hero Order]] NOT IMPLEMENTED [WIP]
+---@field OnNewPath string             @[[Animation Start]] void OnNewPath(obj, pathing)
+---@field OnIssueOrder string          @[[Change/Block Player Orders]] void OnIssueOrder(Args) --Args={Process, Order, Position, Target}
 ---@field OnBuffUpdate string          @[[After Update]] void OnBuffUpdate(obj, buffInst)
 ---@field OnBuffGain string            @[[After Creation]] void OnBuffGain(obj, buffInst)
 ---@field OnBuffLost string            @[[Before Deletion]] void OnBuffLost(obj, buffInst)

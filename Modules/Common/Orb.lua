@@ -102,7 +102,7 @@ local _AutoAttack_NoAttacks = Set{"jarvanivcataclysmattack", "monkeykingdoubleat
                                   "shyvanadoubleattackdragon", "zyragraspingplantattack", "zyragraspingplantattack2",
                                   "zyragraspingplantattackfire", "zyragraspingplantattack2fire"}
 
-local _AutoAttack_AttackReset = Set{"dariusnoxiantacticsonh", "fioraflurry", "garenq", "hecarimrapidslash",
+local _AutoAttack_AttackReset = Set{"asheq", "dariusnoxiantacticsonh", "fioraflurry", "garenq", "hecarimrapidslash",
                                     "jaxempowertwo", "jaycehypercharge", "leonashieldofdaybreak",
                                     "monkeykingdoubleattack", "mordekaisermaceofspades", "nasusq",
                                     "nautiluspiercinggaze", "netherblade", "parley", "poppydevastatingblow",
@@ -118,6 +118,10 @@ local function AsTick(value)
     return value * 1000
 end
 
+local function GetMyHitTime(unit)
+    return Player.AttackCastDelay * 1000 - 100 + Game.GetLatency() / 2 + 1000 * Player.Position:Distance(unit.Position) / Orbwalker:MyProjectileSpeed()
+end
+
 local function IsAutoAttackReset(name)
     return _AutoAttack_AttackReset[name:lower()]
 end
@@ -125,6 +129,11 @@ end
 local function IsAutoAttack(name)
     return (string.match(name:lower(), "attack") and not _AutoAttack_NoAttacks[name:lower()]) or
             _AutoAttack_Attacks[name:lower()]
+end
+
+local function GetPredictedHealth(unit, delay)
+    --todo healthprediction
+    return unit.Health
 end
 
 local function Custom_Lasthit_Logic()
@@ -139,11 +148,14 @@ local function Basic_Lasthit_Logic()
     for _, obj in pairs(minions) do
         local minion = obj.AsMinion
         if minion and minion.IsVisible and not minion.IsDead and Orbwalker:IsValidMinion(minion) and Orbwalker.IsValidAutoAttackTarget(minion)  then
-            local t = Player.AttackCastDelay * 1000 - 100 + Game.GetLatency() / 2 + 1000 * Player.Position:Distance(minion.Position) / Orbwalker:MyProjectileSpeed()
-            --local health = DMGLib:GetPredictedHealth(minion, t)
-
+            local t = GetMyHitTime(minion)
+            local pHealth = GetPredictedHealth(minion, t)
+            if pHealth > 0 and pHealth <= DMGLib:GetDamage("AA", minion) then
+                return minion
+            end
         end
     end
+    return nil
 end
 
 function Orbwalker:MyProjectileSpeed()
@@ -194,7 +206,7 @@ function Orbwalker:GetMovePos()
 end
 
 function Orbwalker:GetBestPossibleTarget()
-    -- Costum Set Target by Script, Highest Prio
+    -- Custom Set Target by Script, Highest Priority
     local TempTarget = Orbwalker.Override.Target
     if TempTarget then
         if Orbwalker:IsValidAutoAttackTarget(TempTarget) then
@@ -235,7 +247,7 @@ end
 
 
 function Orbwalker:CanAttack()
-    if Orbwalker.Setting.AllowAttack and Orbwalker.Data.LastAttack.Time + Player.AttackDelay - Player.AttackCastDelay <= Game.GetTime() then
+    if Orbwalker.Setting.AllowAttack and Orbwalker.Data.LastAttack.Time + Player.AttackDelay - AsTime(Game:GetLatency() / 2) <= Game.GetTime()  then
         return true
     end
     return false
@@ -249,7 +261,7 @@ function Orbwalker:Attack()
         if Args.Target ~= nil and Args.Process and Orbwalker:IsValidAutoAttackTarget(Args.Target) then
             Orbwalker.Data.LastAttack.Confirmed = false
             Input.Attack(Args.Target)
-            Orbwalker.Data.LastAttack.Time = Game.GetTime() + AsTime(Game.GetLatency() / 2 + 5)
+            Orbwalker.Data.LastAttack.Time = Game.GetTime()
             Orbwalker.Data.LastAttack.Target = Args.Target
             Orbwalker.Override.Target = nil
         end
@@ -270,7 +282,7 @@ function Orbwalker:Walk()
         EventManager.FireEvent(Events.OnPostMove, Args)
         if Args.Process then
             Input.MoveTo(Args.Position)
-            Orbwalker.Data.LastMove.Time = Game.GetTime() + AsTime(Game.GetLatency() / 2 + 5)
+            Orbwalker.Data.LastMove.Time = Game.GetTime()
             Orbwalker.Data.LastMove.Position = Args.Position
             Orbwalker.Override.Position = nil
             delay(Game.GetLatency() / 2 + 5, function ()
@@ -335,17 +347,24 @@ local function OnCreateObject(obj)
         if missile and missile.Source and missile.Target and missile.Source.Ptr == Player.Ptr then
             if IsAutoAttack(missile.Name) then
                 Orbwalker.Data.LastAttack.Confirmed = true
-                Orbwalker.Data.LastAttack.Time = Game.GetTime()
                 EventManager.FireEvent(Events.OnPostAttack, missile.Target)
             end
         end
     end
-    local hero = obj.AsHero
-    if hero and hero.IsMe then
-        Orbwalker.Data.LastAttack.Confirmed = true
-        Orbwalker.Data.LastAttack.Time = Game.GetTime()
-        --EventManager.FireEvent(Events.OnPostAttack, spellCast.Target)
+end
+
+local function OnProcessSpell(obj, spell)
+    if obj then
+        if obj.Ptr == Player.Ptr then
+            if IsAutoAttack(spell.Name) then
+                Orbwalker.Data.LastAttack.Time = Game.GetTime()
+            end
+            if IsAutoAttackReset(spell.Name) then
+                delay(100, function() Orbwalker.Data.LastAttack.Time = 0 end)
+            end
+        end
     end
+
 end
 
 function Orbwalker.Load()
@@ -354,6 +373,7 @@ function Orbwalker.Load()
         EventManager.RegisterCallback(Events.OnDraw, OnDraw)
         EventManager.RegisterCallback(Events.OnUpdate, OnUpdate)
         EventManager.RegisterCallback(Events.OnCreateObject, OnCreateObject)
+        EventManager.RegisterCallback(Events.OnProcessSpell, OnProcessSpell)
 
         local Key = Orbwalker.Setting.Key
         EventManager.RegisterCallback(Events.OnKeyDown, function(keycode, _, _) if keycode == Key.Combo then Orbwalker.Mode.Combo = true  end end)

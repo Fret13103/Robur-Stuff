@@ -487,9 +487,11 @@ function DmgLib:CalcPhysicalDamage(source, target, amount)
             PercentArmorPen = 0.7
         end
         if target.IsMinion then
-            amount = amount*1.25
+            amount = amount*1.125
             if string.ends(target.CharName, "MinionSiege") then
                 amount = amount*0.7
+            elseif string.ends(target.CharName, "MinionRanged") then
+                amount = amount*.875/1.125
             end
             return amount
         end

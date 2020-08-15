@@ -11,7 +11,7 @@ local Events = _Core.Enums.Events
 local Player = ObjectManager.Player
 local SpellSlots = _Core.Enums.SpellSlots
 local SpellStates = _Core.Enums.SpellStates
-
+local Game = _Core.Game
 local _Q = SpellSlots.Q
 
 local function IsReady(spellslot)
@@ -21,12 +21,12 @@ end
 local Q_Blocked_Until = 0
 local function Q_Logic()
     if IsReady(_Q) then
-        local tick = Orb:GetTick()
+        local tick = Game:GetTime() * 1000
         if Q_Blocked_Until > tick then return end
-        local timeSinceLastAttack = tick - Orb.LastAttack.Tick
+        local timeSinceLastAttack = tick - Orb.Data.LastAttack.Time * 1000
         if (timeSinceLastAttack < 250) then
-            local attackedUnit = Orb.LastAttack.Target
-            if attackedUnit and attackedUnit.IsValid and Orb:InAttackRange(attackedUnit) and attackedUnit.Health > 0 then
+            local attackedUnit = Orb.Data.LastAttack.Target
+            if Orb:IsValidAutoAttackTarget(attackedUnit) then
                 Q_Blocked_Until = tick + 250
                 delay(250 - timeSinceLastAttack + Player.AttackCastDelay*1000 + 50, function ()
                     Input.Cast(_Q)

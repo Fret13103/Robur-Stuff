@@ -90,8 +90,8 @@ local function Set (list)
   return set
 end
 
-local _MinionList = Set{"SRU_OrderMinionMelee", "SRU_OrderMinionRanged", "SRU_OrderMinionSiege",
-                        "SRU_ChaosMinionMelee", "SRU_ChaosMinionRanged", "SRU_ChaosMinionSiege" }
+local _MinionList = Set{"sru_orderminionmelee", "sru_orderminionranged", "sru_orderminionsiege", "sru_orderminionsuper",
+                        "sru_chaosMinionMelee", "sru_chaosminionranged", "sru_chaosminionsiege" , "sru_chaosminionsuper"}
 
 local _AutoAttack_Attacks = Set{"caitlynheadshotmissile", "frostarrow", "garenslash2", "kennenmegaproc",
                                 "lucianpassiveattack", "masteryidoublestrike", "quinnwenhanced", "renektonexecute",
@@ -109,6 +109,8 @@ local _AutoAttack_AttackReset = Set{"asheq", "dariusnoxiantacticsonh", "fioraflu
                                     "powerfist", "renektonpreexecute", "rengarq", "shyvanadoubleattack", "sivirw",
                                     "takedown", "talonnoxiandiplomacy", "trundletrollsmash", "vaynetumble", "vie",
                                     "volibearq", "xenzhaocombotarget", "yorickspectral"}
+
+local _Ignore_Jungle = Set{""}
 
 local function AsTime(value)
     return value / 1000
@@ -144,10 +146,10 @@ end
 
 local function Basic_Lasthit_Logic()
     -- Basic LastHit Logic for Most Champions
-    local minions = ObjectManager.Get("all", "minions")
+    local minions = ObjectManager.Get("enemy", "minions")
     for _, obj in pairs(minions) do
         local minion = obj.AsMinion
-        if minion and minion.IsVisible and not minion.IsDead and Orbwalker:IsValidMinion(minion) and Orbwalker.IsValidAutoAttackTarget(minion)  then
+        if Orbwalker:IsValidAutoAttackTarget(minion) and Orbwalker:IsValidMinion(minion) then
             local t = GetMyHitTime(minion)
             local pHealth = GetPredictedHealth(minion, t)
             if pHealth > 0 and pHealth <= DMGLib:GetDamage("AA", minion) then
@@ -158,8 +160,13 @@ local function Basic_Lasthit_Logic()
     return nil
 end
 
+local function ShouldWait()
+    -- todo LaneClearHealthPrediction
+    return false
+end
+
 function Orbwalker:MyProjectileSpeed()
-    if PLayer.CharName == "Azir" or Player.CharName == "Kayle" or Player.AttackRange <= 325 then
+    if Player.CharName == "Azir" or Player.CharName == "Kayle" or Player.AttackRange <= 325 then
         return Player.AttackData.MissileMaxSpeed
     else
         return Player.AttackData.MissileSpeed
@@ -178,23 +185,30 @@ function Orbwalker:GetAttackRange(target, source)
     return range
 end
 
+function Orbwalker:IsInAutoAttackRange(target, source)
+    source = source or Player
+    return source.Position:Distance(target.Position) <= Orbwalker:GetAttackRange(target, source)
+end
+
 function Orbwalker:IsValidAutoAttackTarget(unit)
     if unit == nil then return false end
     if unit.IsDead then return false end
+    if not unit.Position then return false end
+    if not Orbwalker:IsInAutoAttackRange(unit) then return false end
     if not unit.IsVisible then return false end
-    if not Orbwalker:IsInAutoAttackRange(unit, Player) then return false end
     return true
 end
 
 function Orbwalker:IsValidMinion(unit)
     if unit == nil then return false end
-    if _MinionList[unit.CharName] then return true end
+    if _MinionList[unit.CharName:lower()] then return true end
     return false
 end
 
-function Orbwalker:IsInAutoAttackRange(target, source)
-    source = source or Player
-    return source.Position:Distance(target.Position) <= Orbwalker:GetAttackRange(target, source)
+function Orbwalker:IsValidJungleMinion(unit)
+    if unit == nil then return false end
+    if unit.CharName:lower():match("plant") then return false end
+    return true
 end
 
 function Orbwalker:GetMovePos()
@@ -205,20 +219,89 @@ function Orbwalker:GetMovePos()
     return mousePos
 end
 
+local function GetBestHeroTarget()
+    return ts:GetTarget(Player.AttackRange - 25, ts.Priority.LowestHealth)
+end
+
 function Orbwalker:GetBestPossibleTarget()
     -- Custom Set Target by Script, Highest Priority
     local TempTarget = Orbwalker.Override.Target
     if TempTarget then
         if Orbwalker:IsValidAutoAttackTarget(TempTarget) then
             return TempTarget
+        else
+            Orbwalker.Override.Target = nil
         end
         TempTarget = nil
     end
 
-    if (Orbwalker.Mode.Harras or Orbwalker.Mode.LastHit or Orbwalker.Mode.LaneClear  or Orbwalker.Mode.LaneFreeze) then
+    -- Get Lasthit Minion if available
+    if (Orbwalker.Mode.Harras or Orbwalker.Mode.LastHit or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LaneFreeze) then
         TempTarget = Custom_Lasthit_Logic() or Basic_Lasthit_Logic()
         if TempTarget then return TempTarget end
     end
+
+    -- Get Best Hero Target if available
+    if (not Orbwalker.Mode.LastHit) then
+        TempTarget = GetBestHeroTarget()
+        if TempTarget then return TempTarget end
+    end
+
+    -- Get Tower if available
+    if Orbwalker.Mode.Harras or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LaneFreeze then
+        local turrets = ObjectManager.Get("enemy", "turrets")
+        for _, obj in pairs(turrets) do
+            local turret = obj.AsTurret
+            if Orbwalker:IsValidAutoAttackTarget(turrets)  then
+                return turret
+            end
+        end
+
+        local inhibitors = ObjectManager.Get("enemy", "inhibitors")
+        for _, obj in pairs(inhibitors) do
+            local inhibitor = obj.AsInhibitor
+            if Orbwalker:IsValidAutoAttackTarget(inhibitor)  then
+                return inhibitor
+            end
+        end
+
+        local hqs = ObjectManager.Get("enemy", "hqs")
+        for _, obj in pairs(hqs) do
+            local hq = obj.AsHQ
+            if Orbwalker:IsValidAutoAttackTarget(hq)  then
+                return hq
+            end
+        end
+
+        -- Get Neutral Neutral Monsters if Possible
+        local monsters = ObjectManager.Get("neutral", "minions")
+        for _, obj in pairs(monsters) do
+            local monster = obj.AsMinion
+            if Orbwalker:IsValidAutoAttackTarget(monster) and Orbwalker:IsValidJungleMinion(monster) then
+                if TempTarget == nil or TempTarget.MaxHealth < monster.MaxHealth then
+                    TempTarget = monster
+                end
+            end
+        end
+        if TempTarget then return TempTarget end
+    end
+
+    -- Wait Logic
+    if  ShouldWait() or not Orbwalker.Mode.LaneClear then
+        return nil
+    end
+
+    local minions = ObjectManager.Get("enemy", "minions")
+    for _, obj in pairs(minions) do
+        local minion = obj.AsMinion
+        if Orbwalker:IsValidAutoAttackTarget(minion) and  Orbwalker:IsValidMinion(minion) then
+            if TempTarget == nil or TempTarget.MaxHealth < minion.MaxHealth then
+                TempTarget = minion
+            end
+        end
+    end
+
+    return TempTarget
 end
 
 function Orbwalker:MinPingCalc()
@@ -256,7 +339,11 @@ end
 function Orbwalker:Attack()
     if Orbwalker:CanAttack() then
         local Args = { Process = true}
-        Args.Target = Orbwalker.Override.Target or ts:GetTarget(Player.AttackRange - 25, ts.Priority.LowestHealth)
+        if Orbwalker.Override.Target then
+            Args.Target = Orbwalker.Override.Target
+        else
+            Args.Target = Orbwalker:GetBestPossibleTarget()
+        end
         EventManager.FireEvent(Events.OnPreAttack, Args)
         if Args.Target ~= nil and Args.Process and Orbwalker:IsValidAutoAttackTarget(Args.Target) then
             Orbwalker.Data.LastAttack.Confirmed = false
@@ -297,14 +384,14 @@ function Orbwalker:Orbwalk()
     Orbwalker:Walk()
 end
 
-local function OnUpdate()
+local function OnTick()
     if Game.IsChatOpen() then return end
     if Game.IsMinimized() then return end
     if Player.IsDead then return end
 
     if Orbwalker.Mode.Combo or Orbwalker.Mode.LaneClear or Orbwalker.Mode.LastHit or
             Orbwalker.Mode.Harras or Orbwalker.Mode.Flee or Orbwalker.Mode.LaneFreeze then
-        Orbwalker.Orbwalk()
+        Orbwalker:Orbwalk()
     end
 end
 
@@ -357,7 +444,7 @@ local function OnProcessSpell(obj, spell)
     if obj then
         if obj.Ptr == Player.Ptr then
             if IsAutoAttack(spell.Name) then
-                Orbwalker.Data.LastAttack.Time = Game.GetTime()
+                --Orbwalker.Data.LastAttack.Time = Game.GetTime()
             end
             if IsAutoAttackReset(spell.Name) then
                 delay(100, function() Orbwalker.Data.LastAttack.Time = 0 end)
@@ -371,7 +458,7 @@ function Orbwalker.Load()
     if not Orbwalker.Loaded then
         Orbwalker.Loaded = true
         EventManager.RegisterCallback(Events.OnDraw, OnDraw)
-        EventManager.RegisterCallback(Events.OnUpdate, OnUpdate)
+        EventManager.RegisterCallback(Events.OnTick, OnTick)
         EventManager.RegisterCallback(Events.OnCreateObject, OnCreateObject)
         EventManager.RegisterCallback(Events.OnProcessSpell, OnProcessSpell)
 

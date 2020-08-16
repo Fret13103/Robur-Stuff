@@ -34,10 +34,10 @@ local function HasBuffType(unit,buffType)
 end
 
 function ts:GetTarget(range, mode, filterBuffs)
-    if mode == nil then mode = ts.Priority.LowestHealth end
-    if filterBuffs == nil then filterBuffs = false end
-    local enemies = ObjectManager.Get("enemy", "heroes")
     local tempHero = nil
+    mode = mode or ts.Priority.LowestHealth
+    filterBuffs = filterBuffs or nil
+    local enemies = ObjectManager.Get("enemy", "heroes")
     for _, obj in pairs(enemies) do
         local hero = obj.AsHero
         if hero and hero.IsVisible and hero.IsAttackableUnit and hero.IsTargetable and hero.Health > 0 and Player.Position:Distance(hero.Position) < range + Player.BoundingRadius + hero.BoundingRadius then
@@ -66,12 +66,12 @@ function ts:GetTarget(range, mode, filterBuffs)
                     end
                 elseif mode == ts.Priority.Closest then
                     local playerPos = Player.Position
-                    if tempHero == nil or playerPos:Distance(hero.Position)  < playerPos:Distance(hero.Position)  then
+                    if tempHero == nil or playerPos:Distance(hero.Position) < playerPos:Distance(tempHero.Position)  then
                         tempHero = hero
                     end
                 elseif mode == ts.Priority.CloseToMouse then
                     local mousePos = Renderer:GetMousePos()
-                    if tempHero == nil or mousePos:Distance(hero.Position)  < mousePos:Distance(hero.Position)  then
+                    if tempHero == nil or mousePos:Distance(hero.Position) < mousePos:Distance(tempHero.Position)  then
                         tempHero = hero
                     end
                 elseif mode == ts.Priority.MostAD then

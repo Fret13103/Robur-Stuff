@@ -25,6 +25,73 @@ local Items ={
     Dorans_Shield = 1054,
 }
 
+local MissileManager = {
+    Missiles = {},
+    MissilesBySource = {},  --{Handle(networkID), list<missile>}
+    MissilesByTarget = {}   --{Handle(networkID), list<missile>}
+}
+
+function MissileManager:IsValidMissile(Obj)
+    local function CheckUnitObj(Obj)
+        return Obj and Obj.__obj and Obj.IsValid and not Obj.IsDead and Obj.AsAttackableUnit and Obj.AsAttackableUnit.IsAlive
+    end
+
+    if Obj.IsValid and not Obj.IsDead and Obj.IsMissile and Obj.AsMissile then
+        local Missile = Obj.AsMissile
+
+        local Source = Missile.Source
+        local Target = Missile.Target
+
+        if CheckUnitObj(Source) and CheckUnitObj(Target) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function MissileManager:RegisterMissile(Missile)
+    Missile=Missile.AsMissile
+
+    local networkID = tonumber(Missile.__obj)
+    self.Missiles[Missile.__obj] = Missile
+
+    local sourceID = Missile.AsMissile.Source.__obj
+    local targetID = Missile.AsMissile.Target.__obj
+
+    self.MissilesBySource[sourceID] = self.MissilesBySource[sourceID] or {}
+    self.MissilesBySource[sourceID][networkID] = Missile
+
+    self.MissilesByTarget[targetID] = self.MissilesByTarget[targetID] or {}
+    self.MissilesByTarget[targetID][networkID] = Missile
+end
+
+function MissileManager:OnCreateObject(Obj)
+    if self:IsValidMissile(Obj) then
+        self:RegisterMissile(Obj)
+    end
+end
+
+function MissileManager:OnDeleteObject(Obj)
+    local networkID = Obj.__obj
+    if self.Missiles[Obj.__obj] then
+        Obj = Obj.AsMissile
+        local sourceID = Obj.Source.__obj
+        local targetID = Obj.Target.__obj
+
+        if self.MissilesBySource[sourceID] then
+            self.MissilesBySource[sourceID][networkID] = nil
+        end
+        if self.MissilesByTarget[targetID] then
+            self.MissilesByTarget[targetID][networkID] = nil
+        end
+    end
+    --if the object is a unit attacking or being attacked by missiles, all missile tracking based on relation to that object are unneeded
+    --any kind of loop of missiles in those sets is unneeded, they will be deleted by the game
+    self.MissilesBySource[networkID] = nil
+    self.MissilesByTarget[networkID] = nil
+end
+
 local DmgLib = {}
 
 ---@param str string
@@ -587,5 +654,74 @@ function DmgLib:GetDamage(spell, target, source, stage, level, includePassive)
     end
     return 0
 end
+
+function DmgLib:GetMissileDamage(Missile)
+    --[[TODO
+        check for specific missiles by name
+
+        Veigar R
+        Brand R
+        ?Zyra Plant Projectiles
+        Annie Q
+        Anivia E
+        Caitlyn R
+        Cassiopeia E
+        Ahri W R
+        GP Q
+        Janna W
+        Jhin Q
+        Kassadin Q
+        Leblanc Q QR
+        Shaco E
+        Teemo Q
+        Tristana R
+        Viktor Q
+        Ryze E
+    ]]
+
+    return self:CalcPhysicalDamage(Missile.Source.AsAI, Missile.Target.AsAI, Missile.Source.TotalAD)
+end
+
+function DmgLib:PredictHealth(target, delay)
+    delay = delay or 0
+
+    --expects target as AttackableUnit
+    local health = target.Health
+
+    --[[ TODO
+        Twitch pasive dot
+        Brand dot
+        poison (cassio,teemo)
+        rylais dot
+        ?rumble dot? may not be a buff
+    ]]
+
+    local missiles = MissileManager.MissilesByTarget[target.__obj]
+    
+    if missiles then
+        for i, Missile in pairs(missiles) do
+            if MissileManager:IsValidMissile(Missile) then
+                local delay2 = Missile.Position:Distance(Missile.Position) / Missile.Speed
+                local damage = self:GetMissileDamage(Missile)
+                if delay2 < delay then
+                    health = health - damage
+                end
+            end
+        end
+    end
+
+    return health
+end
+
+local function OnCreateObject(Obj)
+    MissileManager:OnCreateObject(Obj)
+end
+
+local function OnDeleteObject(Obj)
+    MissileManager:OnDeleteObject(Obj)
+end
+
+EventManager.RegisterCallback(Events.OnCreateObject, OnCreateObject)
+EventManager.RegisterCallback(Events.OnDeleteObject, OnDeleteObject)
 
 return DmgLib
